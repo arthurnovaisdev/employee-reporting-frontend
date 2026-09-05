@@ -1,13 +1,11 @@
-import {
-  AccountCircleOutlined,
-  AddBoxOutlined,
-  AssignmentOutlined,
-  HomeOutlined,
-  LogoutOutlined,
-  Menu as MenuIcon,
-  PeopleOutline,
-  SearchOutlined,
-} from '@mui/icons-material'
+import AccountCircleOutlined from '@mui/icons-material/AccountCircleOutlined'
+import AddBoxOutlined from '@mui/icons-material/AddBoxOutlined'
+import AssignmentOutlined from '@mui/icons-material/AssignmentOutlined'
+import HomeOutlined from '@mui/icons-material/HomeOutlined'
+import LogoutOutlined from '@mui/icons-material/LogoutOutlined'
+import MenuIcon from '@mui/icons-material/Menu'
+import PeopleOutlined from '@mui/icons-material/PeopleOutlined'
+import SearchOutlined from '@mui/icons-material/SearchOutlined'
 import {
   AppBar,
   Box,
@@ -40,7 +38,7 @@ const navigationItems: NavigationItem[] = [
   { label: 'Nova denúncia', path: '/reports/new', icon: <AddBoxOutlined /> },
   { label: 'Consultar protocolo', path: '/reports/consult', icon: <SearchOutlined /> },
   { label: 'Denúncias', path: '/admin/reports', icon: <AssignmentOutlined />, adminOnly: true },
-  { label: 'Usuários', path: '/admin/users', icon: <PeopleOutline />, adminOnly: true },
+  { label: 'Usuários', path: '/admin/users', icon: <PeopleOutlined />, adminOnly: true },
 ]
 
 export function AppShell() {

@@ -19,13 +19,15 @@ export function PublicLayout() {
         elevation={0}
         sx={{
           width: '100%',
-          maxWidth: 440,
-          minHeight: 420,
+          maxWidth: 420,
           p: { xs: 3, sm: 4 },
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: 4,
+          gap: 3,
+          borderTop: '2px solid',
+          borderTopColor: 'primary.main',
+          boxShadow: '0 24px 70px rgba(0, 0, 0, 0.28)',
         }}
       >
         <Box

@@ -34,6 +34,10 @@ apiClient.interceptors.response.use(
       window.dispatchEvent(new Event('auth:unauthorized'))
     }
 
+    if (error.response?.status === 403) {
+      window.dispatchEvent(new Event('auth:forbidden'))
+    }
+
     return Promise.reject(error)
   },
 )

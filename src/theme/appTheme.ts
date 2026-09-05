@@ -59,9 +59,7 @@ export const appTheme = createTheme({
         root: {
           borderRadius: 7,
           boxShadow: 'none',
-        },
-        containedPrimary: {
-          '&:hover': {
+          '&.MuiButton-containedPrimary:hover': {
             backgroundColor: '#e5a326',
             boxShadow: 'none',
           },

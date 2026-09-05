@@ -3,18 +3,38 @@ import { useAuth } from './AuthContext'
 import type { Role } from './auth.types'
 
 export function ProtectedRoute() {
-  const { isAuthenticated, session } = useAuth()
+  const { isAuthenticated } = useAuth()
   const location = useLocation()
 
-  if (!isAuthenticated || !session) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
-  if (!session.passwordChanged && location.pathname !== '/change-password') {
+  return <Outlet />
+}
+
+export function PasswordChangedRoute() {
+  const { session } = useAuth()
+
+  if (!session?.passwordChanged) {
     return <Navigate to="/change-password" replace />
   }
 
   return <Outlet />
+}
+
+export function GuestRoute() {
+  const { session } = useAuth()
+
+  if (!session) {
+    return <Outlet />
+  }
+
+  if (!session.passwordChanged) {
+    return <Navigate to="/change-password" replace />
+  }
+
+  return <Navigate to={session.role === 'ADMIN' ? '/admin/reports' : '/home'} replace />
 }
 
 interface RoleRouteProps {
@@ -25,7 +45,7 @@ export function RoleRoute({ allowedRoles }: RoleRouteProps) {
   const { session } = useAuth()
 
   if (!session || !allowedRoles.includes(session.role)) {
-    return <Navigate to="/home" replace />
+    return <Navigate to="/forbidden" replace />
   }
 
   return <Outlet />
