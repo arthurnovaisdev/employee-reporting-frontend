@@ -1,0 +1,39 @@
+{
+  "name": "employee-reporting-frontend",
+  "version": "1.0.0",
+  "description": "Frontend da Ouvidoria Interna da MB.FREIRE.",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arthurnovaisdev/employee-reporting-frontend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/arthurnovaisdev/employee-reporting-frontend/issues"
+  },
+  "homepage": "https://github.com/arthurnovaisdev/employee-reporting-frontend#readme",
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@hookform/resolvers": "^5.9.1",
+    "@mui/icons-material": "^9.4.0",
+    "@mui/material": "^9.4.0",
+    "@tanstack/react-query": "^5.102.8",
+    "axios": "^1.20.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-hook-form": "^7.87.0",
+    "react-router-dom": "^7.18.3",
+    "zod": "^4.5.4"
+  }
+}
