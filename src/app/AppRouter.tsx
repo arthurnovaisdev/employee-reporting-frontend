@@ -52,12 +52,18 @@ export function AppRouter() {
         </Route>
 
         <Route element={<PasswordChangedRoute />}>
-          <Route element={<AppShell />}>
+          <Route element={<RoleRoute allowedRoles={['EMPLOYEE']} />}>
             <Route path="/home" element={<HomePage />} />
-            <Route path="/reports/new" element={<NewReportPage />} />
-            <Route path="/reports/success" element={<ReportSuccessPage />} />
-            <Route path="/reports/consult" element={<ProtocolConsultPage />} />
+          </Route>
+
+          <Route element={<AppShell />}>
             <Route path="/forbidden" element={<ForbiddenPage />} />
+
+            <Route element={<RoleRoute allowedRoles={['EMPLOYEE']} />}>
+              <Route path="/reports/new" element={<NewReportPage />} />
+              <Route path="/reports/success" element={<ReportSuccessPage />} />
+              <Route path="/reports/consult" element={<ProtocolConsultPage />} />
+            </Route>
 
             <Route element={<RoleRoute allowedRoles={['ADMIN']} />}>
               <Route path="/admin/reports" element={<AdminReportsPage />} />

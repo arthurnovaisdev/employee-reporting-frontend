@@ -116,6 +116,10 @@ Usuário administrativo, destinado principalmente ao responsável pelo canal/RH.
 
 Possui permissões administrativas adicionais.
 
+A conta ADMIN é exclusivamente administrativa e não deve ser utilizada para registrar ou acompanhar denúncias como denunciante.
+
+Caso uma pessoa que exerça função administrativa/RH deseje registrar uma denúncia como funcionária, deverá utilizar sua conta EMPLOYEE separada.
+
 Pode realizar operações como:
 
 * consultar denúncias;

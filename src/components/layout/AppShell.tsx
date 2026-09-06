@@ -22,6 +22,7 @@ import {
 import { useState, type ReactNode } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../features/auth/AuthContext'
+import type { Role } from '../../features/auth/auth.types'
 import { BrandLogo } from './BrandLogo'
 
 const drawerWidth = 260
@@ -30,15 +31,25 @@ interface NavigationItem {
   label: string
   path: string
   icon: ReactNode
-  adminOnly?: boolean
+  roles: Role[]
 }
 
 const navigationItems: NavigationItem[] = [
-  { label: 'Início', path: '/home', icon: <HomeOutlined /> },
-  { label: 'Nova denúncia', path: '/reports/new', icon: <AddBoxOutlined /> },
-  { label: 'Consultar protocolo', path: '/reports/consult', icon: <SearchOutlined /> },
-  { label: 'Denúncias', path: '/admin/reports', icon: <AssignmentOutlined />, adminOnly: true },
-  { label: 'Usuários', path: '/admin/users', icon: <PeopleOutlined />, adminOnly: true },
+  { label: 'Início', path: '/home', icon: <HomeOutlined />, roles: ['EMPLOYEE'] },
+  { label: 'Nova denúncia', path: '/reports/new', icon: <AddBoxOutlined />, roles: ['EMPLOYEE'] },
+  {
+    label: 'Consultar protocolo',
+    path: '/reports/consult',
+    icon: <SearchOutlined />,
+    roles: ['EMPLOYEE'],
+  },
+  {
+    label: 'Denúncias',
+    path: '/admin/reports',
+    icon: <AssignmentOutlined />,
+    roles: ['ADMIN'],
+  },
+  { label: 'Usuários', path: '/admin/users', icon: <PeopleOutlined />, roles: ['ADMIN'] },
 ]
 
 export function AppShell() {
@@ -57,7 +68,7 @@ export function AppShell() {
       <Divider />
       <List sx={{ px: 1, py: 2 }}>
         {navigationItems
-          .filter((item) => !item.adminOnly || session?.role === 'ADMIN')
+          .filter((item) => session && item.roles.includes(session.role))
           .map((item) => (
             <ListItemButton
               key={item.path}

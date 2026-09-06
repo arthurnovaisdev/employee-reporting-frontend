@@ -63,14 +63,18 @@ Authorization: Bearer <TOKEN>
 | `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password` | Público |
 | Swagger/OpenAPI nos caminhos citados | Público |
 | `/api/auth/register` | ADMIN |
-| `/api/users/me` e `/api/users/me/password` | Autenticado |
+| `/api/users/me/**` | Autenticado |
 | Demais rotas `/api/users/**` | ADMIN |
-| `/api/reports/admin` e subrotas | ADMIN |
-| Demais rotas `/api/reports/**` | EMPLOYEE ou ADMIN |
+| `/api/reports/admin/**` | ADMIN |
+| POST `/api/reports` | EMPLOYEE |
+| POST `/api/reports/*/attachments` | EMPLOYEE |
+| GET `/api/reports/consult` | EMPLOYEE |
+| GET `/api/categories` | EMPLOYEE ou ADMIN |
 | POST `/api/categories` | ADMIN |
-| GET `/api/categories` | Autenticado; não há restrição específica de role |
 
-Somente `EMPLOYEE` e `ADMIN` existem. Não há endpoint exclusivo de EMPLOYEE. As authorities são construídas a partir do usuário consultado no banco a cada autenticação por JWT, não diretamente da claim `role`. As demais URLs caem em `anyRequest().authenticated()`; isso não significa que possuam endpoint.
+Somente `EMPLOYEE` e `ADMIN` existem. As rotas de criação de denúncia, envio de anexos e consulta por protocolo + código são exclusivas de `EMPLOYEE`; uma conta `ADMIN` recebe 403 ao tentar utilizá-las. A conta administrativa acessa denúncias exclusivamente por `/api/reports/admin/**`. Caso uma pessoa do RH também precise registrar ou acompanhar uma denúncia como funcionária, deve usar uma conta `EMPLOYEE` separada da conta `ADMIN`.
+
+As authorities são construídas a partir do usuário consultado no banco a cada autenticação por JWT, não diretamente da claim `role`. As demais URLs caem em `anyRequest().authenticated()`; isso não significa que possuam endpoint nem amplia o acesso aos matchers específicos declarados antes dessa regra.
 
 ### Primeiro acesso, usuário desativado e falhas de token
 
@@ -109,7 +113,7 @@ Cadastro sempre cria `EMPLOYEE`; não recebe `role`, `active` ou `passwordChange
 | Método e rota | Finalidade / acesso | Path / query | Body | Sucesso | Principais erros específicos |
 | --- | --- | --- | --- | --- | --- |
 | POST `/api/categories` | Criar categoria; ADMIN | Nenhum / nenhum | `CategoryRequestDTO` | 201, `CategoryResponseDTO` | 400 validação; 409 nome duplicado/restrição de banco |
-| GET `/api/categories` | Listar categorias; autenticado | Nenhum / `page`, `size`, `sort` | Nenhum | 200, `Page<CategoryResponseDTO>` | 500 em falhas de consulta, inclusive ordenação não suportada conforme resolução em runtime |
+| GET `/api/categories` | Listar categorias; EMPLOYEE ou ADMIN | Nenhum / `page`, `size`, `sort` | Nenhum | 200, `Page<CategoryResponseDTO>` | 500 em falhas de consulta, inclusive ordenação não suportada conforme resolução em runtime |
 
 A listagem não filtra `active`; retorna também categorias inativas. Não existem consulta individual, edição, ativação, desativação ou exclusão de categoria pela API.
 
@@ -117,9 +121,9 @@ A listagem não filtra `active`; retorna também categorias inativas. Não exist
 
 | Método e rota | Finalidade / acesso | Path / query | Body | Sucesso | Principais erros específicos |
 | --- | --- | --- | --- | --- | --- |
-| POST `/api/reports` | Criar denúncia; EMPLOYEE ou ADMIN | Nenhum / nenhum | `ReportRequestDTO` | 201, `ProtocolResponseDTO` | 400 validação; 404 categoria não encontrada; 409 restrição de banco |
-| POST `/api/reports/{protocol}/attachments` | Anexar arquivos; EMPLOYEE ou ADMIN | `protocol`: String / `trackingCode`: String obrigatório, enviar como campo textual multipart | Multipart com `trackingCode` e `files`, múltiplos arquivos | 201, sem corpo | 400 código incorreto; 404 denúncia não encontrada; arquivos inválidos lançam exceções sem handler específico, podendo resultar em 500; limites multipart dependem do tratamento em runtime |
-| GET `/api/reports/consult` | Consultar por protocolo e código; EMPLOYEE ou ADMIN | Nenhum / `protocol`: String obrigatório, `code`: String obrigatório | Nenhum | 200, `ReportResponseDTO` | 404 protocolo não encontrado ou código incorreto; ausência de parâmetro sem handler específico, ver seção 8 |
+| POST `/api/reports` | Criar denúncia; EMPLOYEE | Nenhum / nenhum | `ReportRequestDTO` | 201, `ProtocolResponseDTO` | 400 validação; 404 categoria não encontrada; 409 restrição de banco |
+| POST `/api/reports/{protocol}/attachments` | Anexar arquivos; EMPLOYEE | `protocol`: String / `trackingCode`: String obrigatório, enviar como campo textual multipart | Multipart com `trackingCode` e `files`, múltiplos arquivos | 201, sem corpo | 400 código incorreto; 404 denúncia não encontrada; arquivos inválidos lançam exceções sem handler específico, podendo resultar em 500; limites multipart dependem do tratamento em runtime |
+| GET `/api/reports/consult` | Consultar por protocolo e código; EMPLOYEE | Nenhum / `protocol`: String obrigatório, `code`: String obrigatório | Nenhum | 200, `ReportResponseDTO` | 404 protocolo não encontrado ou código incorreto; ausência de parâmetro sem handler específico, ver seção 8 |
 | GET `/api/reports/admin` | Listar todas as denúncias; ADMIN | Nenhum / `page`, `size`, `sort` | Nenhum | 200, `Page<ReportResponseDTO>` | 500 falhas de consulta/ordenação |
 | PATCH `/api/reports/admin/{protocol}/status` | Alterar status; ADMIN | `protocol`: String / nenhum | `ReportStatusUpdateRequestDTO` | 200, `ReportResponseDTO` | 400 validação; 404 denúncia não encontrada; enum inválido é erro de conversão, ver seção 8 |
 
@@ -499,7 +503,7 @@ Para desenvolvimento local no navegador, usar origem `http://localhost:5173`. `h
 
 ## 10. Upload de arquivos
 
-- Endpoint: `POST /api/reports/{protocol}/attachments`, com JWT de EMPLOYEE ou ADMIN.
+- Endpoint: `POST /api/reports/{protocol}/attachments`, exclusivamente com JWT de `EMPLOYEE`. Uma conta `ADMIN` não possui autorização para esse endpoint.
 - Body: `multipart/form-data`; campo textual obrigatório **`trackingCode`** (String, código retornado na criação) e campo **`files`**, mapeado para `List<MultipartFile>`. Para vários arquivos, repetir `files` no `FormData`. Ambos são `@RequestParam`; enviar o código no FormData evita colocá-lo na URL. Não há `@NotBlank` no parâmetro, mas o service compara seu valor com o hash BCrypt.
 - MIME types aceitos: `image/jpeg`, `image/png`, `application/pdf`. A checagem usa o Content-Type informado no arquivo; não há inspeção de conteúdo implementada.
 - Limite configurado: `spring.servlet.multipart.max-file-size=10MB` por arquivo e `spring.servlet.multipart.max-request-size=10MB` para a requisição inteira. Vários arquivos compartilham o limite total, incluindo o envelope multipart.
@@ -533,26 +537,38 @@ Reset marca o token como usado e `passwordChanged=true`. Token usado é verifica
 
 ### Criação de denúncia
 
-Autenticar, carregar categorias paginadas e enviar `ReportRequestDTO` em POST `/reports`. Embora a interface possa mostrar apenas ativas, o backend não rejeita categoria inativa. Em 201, exibir claramente **protocol e trackingCode** e oferecer copiar/salvar. O código só é devolvido nessa criação e deve ser tratado como informação sensível de acesso: não registrar em logs nem enviar a serviços externos.
+O fluxo de criação de denúncia é exclusivo de uma conta `EMPLOYEE`. Autenticar como `EMPLOYEE`, carregar categorias paginadas e enviar `ReportRequestDTO` em POST `/reports`. Uma conta `ADMIN` recebe 403 nesse endpoint e não deve ser direcionada pelo frontend a esse fluxo. Embora a interface possa mostrar apenas categorias ativas, o backend não rejeita categoria inativa. Em 201, exibir claramente **protocol e trackingCode** e oferecer copiar/salvar. O código só é devolvido nessa criação e deve ser tratado como informação sensível de acesso: não registrar em logs nem enviar a serviços externos.
 
 ### Consulta por protocolo
 
-Com login ativo, solicitar protocolo e código, enviar GET `/reports/consult` com `protocol` e `code`. Exibir os cinco campos de `ReportResponseDTO`. Tratar 404 tanto para protocolo inexistente como código incorreto. Não há recuperação do tracking code ou consulta somente por protocolo.
+Com uma conta `EMPLOYEE` autenticada, solicitar protocolo e código e enviar GET `/reports/consult` com `protocol` e `code`. Uma conta `ADMIN` recebe 403 e deve consultar denúncias somente pelas rotas administrativas. Exibir os cinco campos de `ReportResponseDTO`. Tratar 404 tanto para protocolo inexistente como código incorreto. Não há recuperação do tracking code ou consulta somente por protocolo.
 
 ### Upload de anexos
 
-Após criar a denúncia, montar `FormData` com o campo textual `trackingCode` e uma ou mais partes `files`, e enviar ao protocolo retornado. Deixar navegador/cliente gerar Content-Type com boundary; não enviar JSON. Tratar 201 sem parsing de body. Não construir links de download ou galeria a partir do protocolo, pois não há contrato para isso.
+Com a mesma conta `EMPLOYEE` usada no fluxo de funcionário, após criar a denúncia, montar `FormData` com o campo textual `trackingCode` e uma ou mais partes `files`, e enviar ao protocolo retornado. Uma conta `ADMIN` recebe 403 nesse endpoint. Deixar navegador/cliente gerar Content-Type com boundary; não enviar JSON. Tratar 201 sem parsing de body. Não construir links de download ou galeria a partir do protocolo, pois não há contrato para isso.
 
 ### Fluxo administrativo
 
-ADMIN lista denúncias em `/reports/admin` e altera status em `/reports/admin/{protocol}/status` com observação opcional. A resposta atualiza a denúncia, mas não fornece histórico ou note. ADMIN também cadastra EMPLOYEE em `/auth/register`, lista/consulta usuários e ativa/desativa contas. ADMIN cria categorias; qualquer usuário autenticado pode listá-las.
+`ADMIN` acessa denúncias exclusivamente pelas rotas administrativas: lista em `/reports/admin` e altera status em `/reports/admin/{protocol}/status`, com observação opcional. A resposta atualiza a denúncia, mas não fornece histórico ou note. A conta `ADMIN` não pode criar denúncias, enviar anexos nem consultar por protocolo + código. Caso uma pessoa do RH precise usar essas funções como funcionária, deve autenticar-se com uma conta `EMPLOYEE` separada.
+
+`ADMIN` também cadastra `EMPLOYEE` em `/auth/register`, lista/consulta usuários e ativa/desativa contas. Tanto `EMPLOYEE` quanto `ADMIN` podem listar categorias com GET `/categories`; somente `ADMIN` pode criá-las com POST `/categories`.
+
+### Regras de autorização para o frontend
+
+- Exibir e permitir acesso às ações de criar denúncia, enviar anexos e consultar por protocolo + código somente para sessões com role `EMPLOYEE`.
+- Não apresentar essas ações como disponíveis a uma sessão `ADMIN` e não usar a conta administrativa como alternativa para chamar os endpoints de funcionário.
+- Direcionar a experiência de denúncias da sessão `ADMIN` exclusivamente às rotas e telas administrativas.
+- Se uma pessoa possuir responsabilidades de RH e também precisar denunciar como funcionária, tratar as contas `ADMIN` e `EMPLOYEE` como sessões separadas; não tentar alternar a role no frontend.
+- Permitir a listagem de categorias para `EMPLOYEE` e `ADMIN`, mas restringir a criação de categorias a `ADMIN`.
+- Manter guards visuais no frontend para a experiência correta, sem tratá-los como substitutos da autorização aplicada pelo backend.
 
 ## 12. Pontos de atenção e cuidados de integração
 
 ### Limitações relevantes do backend atual
 
 - Criação, acompanhamento e upload de denúncias exigem login apesar do contexto de denúncias anônimas.
-- Criação de categoria exige ADMIN; listagem exige autenticação e inclui categorias inativas, que também são aceitas na criação de denúncia.
+- Criação de categoria exige `ADMIN`; listagem aceita `EMPLOYEE` e `ADMIN` e inclui categorias inativas, que também são aceitas na criação de denúncia.
+- Criação de denúncia, consulta por protocolo + código e upload de anexos exigem `EMPLOYEE`. Uma conta `ADMIN` recebe 403 nessas rotas e acessa denúncias somente por `/reports/admin/**`.
 - `ReportAdminResponseDTO` existe, mas não é usado pelos controllers ou serviços de resposta. Declara `protocol`, `category`, `description`, `status`, `incidentDate`, `incidentLocation`, `createdAt`; não consumir esse formato. A API administrativa retorna `ReportResponseDTO`.
 - `incidentDate` e `incidentLocation` são aceitos e persistidos, mas não retornados por nenhum endpoint atual.
 - `StatusHistory` e `AuditLog` são gravados na alteração efetiva de status, mas não têm endpoints REST de consulta. `note` não pode ser recuperada via API. Não há comentários.
@@ -588,10 +604,10 @@ Todos os endpoints de negócio encontrados nos controllers estão abaixo. O host
 | POST | `/api/auth/forgot-password` | Não | Pública | Solicitar recuperação por e-mail |
 | POST | `/api/auth/reset-password` | Não | Pública | Redefinir senha usando token |
 | POST | `/api/categories` | Sim | ADMIN | Criar categoria |
-| GET | `/api/categories` | Sim | Qualquer autenticado | Listar categorias paginadas |
-| POST | `/api/reports` | Sim | EMPLOYEE ou ADMIN | Criar denúncia e obter protocolo/código |
-| POST | `/api/reports/{protocol}/attachments` | Sim | EMPLOYEE ou ADMIN | Enviar anexos |
-| GET | `/api/reports/consult` | Sim | EMPLOYEE ou ADMIN | Consultar com protocol e code |
+| GET | `/api/categories` | Sim | EMPLOYEE ou ADMIN | Listar categorias paginadas |
+| POST | `/api/reports` | Sim | EMPLOYEE | Criar denúncia e obter protocolo/código |
+| POST | `/api/reports/{protocol}/attachments` | Sim | EMPLOYEE | Enviar anexos |
+| GET | `/api/reports/consult` | Sim | EMPLOYEE | Consultar com protocol e code |
 | GET | `/api/reports/admin` | Sim | ADMIN | Listar denúncias paginadas |
 | PATCH | `/api/reports/admin/{protocol}/status` | Sim | ADMIN | Alterar status |
 | GET | `/api/users/me` | Sim | Qualquer autenticado | Consultar próprio perfil |
