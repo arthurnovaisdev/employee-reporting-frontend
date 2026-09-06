@@ -362,6 +362,22 @@ O frontend deve destacar claramente que o protocolo/código devem ser guardados.
 
 ---
 
+## 13.1 Implementação do fluxo no frontend
+
+O formulário em `/reports/new` usa React Hook Form e Zod com os quatro campos de `ReportRequestDTO`. A rota é exclusiva de `EMPLOYEE`; acesso de `ADMIN` é redirecionado para `/admin/reports`.
+
+As categorias são carregadas de `GET /api/categories`, percorrendo as páginas e validando a estrutura recebida em runtime. O adaptador reconhece metadados na raiz ou em `page`; a serialização do ambiente real ainda precisa ser confirmada com uma sessão autenticada. Categorias inativas não são filtradas, conforme a aceitação atual do backend.
+
+A criação usa `POST /api/reports`. Somente após receber protocolo e código, e somente quando existem arquivos, envia `FormData` para `POST /api/reports/{protocol}/attachments`, repetindo `files` e incluindo `trackingCode`. JPEG, PNG e PDF são validados por MIME, tamanho individual e tamanho do envio multipart, com limite de 10 MB; arquivos vazios são rejeitados.
+
+O comprovante em `/reports/success` oferece cópia individual e conjunta. Protocolo e código ficam apenas na memória das rotas do fluxo, sem storage, URL ou cache de mutations. São descartados ao sair do fluxo ou recarregar a página; a interface orienta o usuário a guardá-los.
+
+Falhas de upload não invalidam o registro: a tela preserva o comprovante e informa que apenas os anexos falharam. Não há reenvio automático do lote. Um 401 durante o upload encerra a sessão, mas permite guardar o comprovante em memória antes de novo login.
+
+Os testes locais do contrato e do encadeamento podem ser executados com `npm test`, usando respostas simuladas, sem criar denúncias reais.
+
+---
+
 # 14. Anexos opcionais
 
 A denúncia pode possuir **arquivos opcionais**.

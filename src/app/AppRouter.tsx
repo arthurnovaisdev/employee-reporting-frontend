@@ -19,6 +19,7 @@ import { HomePage } from '../pages/HomePage'
 import { NewReportPage } from '../pages/reports/NewReportPage'
 import { ProtocolConsultPage } from '../pages/reports/ProtocolConsultPage'
 import { ReportSuccessPage } from '../pages/reports/ReportSuccessPage'
+import { ReportFlowLayout, ReportFlowShell } from '../features/reports/ReportFlowLayout'
 
 export function AppRouter() {
   const navigate = useNavigate()
@@ -46,6 +47,23 @@ export function AppRouter() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
       </Route>
 
+      <Route element={<ReportFlowLayout />}>
+        <Route element={<ProtectedRoute />}>
+          <Route element={<RoleRoute allowedRoles={['EMPLOYEE']} />}>
+            <Route element={<PasswordChangedRoute />}>
+              <Route element={<ReportFlowShell />}>
+                <Route path="/reports/new" element={<NewReportPage />} />
+              </Route>
+            </Route>
+          </Route>
+        </Route>
+        {/* Um comprovante em memória continua acessível se o upload expirar
+            a sessão. A página bloqueia ADMIN e acesso sem comprovante. */}
+        <Route element={<AppShell />}>
+          <Route path="/reports/success" element={<ReportSuccessPage />} />
+        </Route>
+      </Route>
+
       <Route element={<ProtectedRoute />}>
         <Route element={<PublicLayout />}>
           <Route path="/change-password" element={<ChangePasswordPage />} />
@@ -60,8 +78,6 @@ export function AppRouter() {
             <Route path="/forbidden" element={<ForbiddenPage />} />
 
             <Route element={<RoleRoute allowedRoles={['EMPLOYEE']} />}>
-              <Route path="/reports/new" element={<NewReportPage />} />
-              <Route path="/reports/success" element={<ReportSuccessPage />} />
               <Route path="/reports/consult" element={<ProtocolConsultPage />} />
             </Route>
 

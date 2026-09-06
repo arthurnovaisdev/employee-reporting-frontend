@@ -52,7 +52,7 @@ const navigationItems: NavigationItem[] = [
   { label: 'Usuários', path: '/admin/users', icon: <PeopleOutlined />, roles: ['ADMIN'] },
 ]
 
-export function AppShell() {
+export function AppShell({ navigationDisabled = false }: { navigationDisabled?: boolean }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const { endSession, session } = useAuth()
   const location = useLocation()
@@ -72,6 +72,7 @@ export function AppShell() {
           .map((item) => (
             <ListItemButton
               key={item.path}
+              disabled={navigationDisabled}
               selected={location.pathname === item.path}
               onClick={() => {
                 navigate(item.path)
@@ -86,6 +87,7 @@ export function AppShell() {
       </List>
       <Box sx={{ mt: 'auto', p: 1 }}>
         <ListItemButton
+          disabled={navigationDisabled}
           onClick={() => {
             endSession()
             navigate('/login', { replace: true })

@@ -45,7 +45,7 @@ export function RoleRoute({ allowedRoles }: RoleRouteProps) {
   const { session } = useAuth()
 
   if (!session || !allowedRoles.includes(session.role)) {
-    return <Navigate to="/forbidden" replace />
+    return <Navigate to={session?.role === 'ADMIN' ? '/admin/reports' : '/forbidden'} replace />
   }
 
   return <Outlet />
