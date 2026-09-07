@@ -1,6 +1,6 @@
-import axios from 'axios'
 import { z } from 'zod'
 import { apiClient } from '../../lib/http/apiClient'
+import { getApiErrorMessage } from '../../lib/http/apiError'
 
 export const reportStatuses = [
   'RECEIVED',
@@ -62,27 +62,13 @@ export async function consultReport(values: ProtocolConsultFormValues) {
 }
 
 export function getProtocolConsultErrorMessage(error: unknown) {
-  if (!axios.isAxiosError(error)) {
-    return 'Não foi possível concluir a consulta. Tente novamente.'
-  }
-
-  if (!error.response) {
-    return 'Não foi possível conectar ao serviço. Verifique sua conexão e tente novamente.'
-  }
-
-  if (error.response.status === 400) {
-    return 'Os dados da consulta não são válidos. Confira o protocolo e o código de acompanhamento.'
-  }
-
-  if (error.response.status === 404) {
-    return 'Não foi possível localizar uma denúncia com os dados informados. Confira o protocolo e o código de acompanhamento.'
-  }
-
-  if (error.response.status >= 500) {
-    return 'O serviço está temporariamente indisponível. Tente novamente em instantes.'
-  }
-
-  return 'Não foi possível concluir a consulta. Tente novamente.'
+  return getApiErrorMessage(error, {
+    defaultMessage: 'Não foi possível concluir a consulta. Tente novamente.',
+    statusMessages: {
+      400: 'Os dados da consulta não são válidos. Confira o protocolo e o código de acompanhamento.',
+      404: 'Não foi possível localizar uma denúncia com os dados informados. Confira o protocolo e o código de acompanhamento.',
+    },
+  })
 }
 
 export function formatReportCreatedAt(value: string) {

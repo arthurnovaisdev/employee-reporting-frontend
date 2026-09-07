@@ -68,7 +68,7 @@ export function AdminReportDetail({ report, onClose, onUpdated }: {
             if (!unchanged && !saving) { setError(null); setConfirmation(values) }
           })} spacing={2} aria-busy={saving}>
             <Typography component="h2" variant="h6">Alterar status</Typography>
-            {error && <Alert severity="error">{error}</Alert>}
+            {error && <Alert severity="error" aria-live="assertive">{error}</Alert>}
             <Controller name="newStatus" control={control} render={({ field }) => (
               <TextField {...field} select label="Novo status" fullWidth disabled={saving || Boolean(confirmation)} error={Boolean(errors.newStatus)} helperText={errors.newStatus?.message}>
                 {reportStatuses.map((status) => <MenuItem key={status} value={status}>{reportStatusLabels[status]}</MenuItem>)}
@@ -97,7 +97,7 @@ export function AdminReportDetail({ report, onClose, onUpdated }: {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmation(null)} disabled={saving}>Voltar</Button>
-          <Button onClick={() => void save()} variant="contained" disabled={saving} startIcon={saving ? <CircularProgress size={18} color="inherit" /> : undefined}>Confirmar e salvar</Button>
+          <Button onClick={() => void save()} variant="contained" disabled={saving} startIcon={saving ? <CircularProgress size={18} color="inherit" /> : undefined}>{saving ? 'Salvando…' : 'Confirmar e salvar'}</Button>
         </DialogActions>
       </Dialog>
     </Dialog>

@@ -23,7 +23,7 @@ import {
   toChangePasswordRequest,
   type ChangePasswordFormValues,
 } from '../../features/auth/passwordForms'
-import { getApiErrorMessage } from '../../lib/http/apiError'
+import { getApiErrorMessage, getApiValidationDetails } from '../../lib/http/apiError'
 
 export function ChangePasswordPage() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
@@ -37,6 +37,7 @@ export function ChangePasswordPage() {
     register,
     handleSubmit,
     reset,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<ChangePasswordFormValues>({
     resolver: zodResolver(changePasswordSchema),
@@ -57,6 +58,10 @@ export function ChangePasswordPage() {
       navigate(session?.role === 'ADMIN' ? '/admin/reports' : '/home', { replace: true })
     } catch (error) {
       reset()
+      const details = getApiValidationDetails(error)
+      for (const field of ['currentPassword', 'newPassword'] as const) {
+        if (details?.[field]) setError(field, { type: 'server', message: details[field] })
+      }
       setRequestError(getApiErrorMessage(error))
     }
   }
@@ -186,12 +191,9 @@ export function ChangePasswordPage() {
           fullWidth
           disabled={isSubmitting}
           sx={{ minHeight: 42 }}
+          startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : undefined}
         >
-          {isSubmitting ? (
-            <CircularProgress size={22} color="inherit" />
-          ) : (
-            firstAccess ? 'Salvar e continuar' : 'Salvar nova senha'
-          )}
+          {isSubmitting ? 'Salvando…' : firstAccess ? 'Salvar e continuar' : 'Salvar nova senha'}
         </Button>
 
         <Button

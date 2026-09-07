@@ -23,8 +23,8 @@ const {
   toResetPasswordRequest,
 } = await server.ssrLoadModule('/src/features/auth/passwordForms.ts')
 const { apiClient } = await server.ssrLoadModule('/src/lib/http/apiClient.ts')
-const { setAccessToken } = await server.ssrLoadModule('/src/features/auth/tokenStore.ts')
-const { getApiErrorMessage } = await server.ssrLoadModule('/src/lib/http/apiError.ts')
+const { getAccessToken, setAccessToken } = await server.ssrLoadModule('/src/features/auth/tokenStore.ts')
+const { getApiErrorMessage, getApiValidationDetails } = await server.ssrLoadModule('/src/lib/http/apiError.ts')
 
 const response = (config, data = '', status = 200) => ({
   config,
@@ -68,6 +68,51 @@ test('forgot password apresenta usuário inexistente e ausência de e-mail confo
     getApiErrorMessage(error(400, 'Este usuário não possui um e-mail de contato cadastrado para recuperação.')),
     'Este usuário não possui um e-mail de contato cadastrado para recuperação.',
   )
+})
+
+test('erros respeitam erro/detalhes, ignoram message e ocultam conteúdo interno em 500', () => {
+  const config = { url: '/auth/forgot-password', method: 'post' }
+  const error = (status, data) => new axios.AxiosError(
+    'Falha simulada',
+    'ERR_BAD_RESPONSE',
+    config,
+    undefined,
+    response(config, data, status),
+  )
+
+  const validationError = error(400, {
+    detalhes: { cpf: 'CPF inválido.' },
+    message: 'Este campo não pertence ao contrato.',
+  })
+  assert.deepEqual(getApiValidationDetails(validationError), { cpf: 'CPF inválido.' })
+  assert.equal(getApiErrorMessage(validationError), 'CPF inválido.')
+  assert.equal(
+    getApiErrorMessage(error(400, { message: 'Não exibir.' })),
+    'Confira os dados informados e tente novamente.',
+  )
+  const internalErrorMessage = getApiErrorMessage(error(500, { erro: 'stack trace e detalhes internos' }))
+  assert.match(internalErrorMessage, /temporariamente indisponível/)
+  assert.equal(internalErrorMessage.includes('stack trace'), false)
+  assert.match(getApiErrorMessage(new axios.AxiosError('Network Error', 'ERR_NETWORK')), /conectar/)
+})
+
+test('401 em rota pública não encerra uma sessão válida', async () => {
+  let unauthorized = 0
+  window.addEventListener('auth:unauthorized', () => unauthorized++)
+  setAccessToken('sessao-valida-de-teste')
+  apiClient.defaults.adapter = async (config) => {
+    throw new axios.AxiosError(
+      'Falha simulada',
+      'ERR_BAD_RESPONSE',
+      config,
+      undefined,
+      response(config, { erro: 'Solicitação inválida.' }, 401),
+    )
+  }
+
+  await assert.rejects(forgotPassword({ cpf: '12345678901' }))
+  assert.equal(getAccessToken(), 'sessao-valida-de-teste')
+  assert.equal(unauthorized, 0)
 })
 
 test('reset valida confirmação e envia somente token e newPassword', async () => {

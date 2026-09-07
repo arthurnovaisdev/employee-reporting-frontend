@@ -83,6 +83,7 @@ export function AppShell({ navigationDisabled = false }: { navigationDisabled?: 
               key={item.path}
               disabled={navigationDisabled}
               selected={location.pathname === item.path}
+              aria-current={location.pathname === item.path ? 'page' : undefined}
               onClick={() => {
                 navigate(item.path)
                 setMobileOpen(false)
@@ -131,11 +132,11 @@ export function AppShell({ navigationDisabled = false }: { navigationDisabled?: 
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700, flexGrow: 1 }}>
+          <Typography variant="subtitle1" noWrap sx={{ fontWeight: 700, flexGrow: 1, minWidth: 0 }}>
             Ouvidoria Interna
           </Typography>
           <AccountCircleOutlined sx={{ mr: 1, color: 'primary.main' }} />
-          <Typography variant="body2" color="text.secondary" noWrap>
+          <Typography variant="body2" color="text.secondary" noWrap title={session?.name} sx={{ maxWidth: { xs: 92, sm: 220 } }}>
             {session?.name ?? 'Usuário'}
           </Typography>
         </Toolbar>
@@ -148,7 +149,7 @@ export function AppShell({ navigationDisabled = false }: { navigationDisabled?: 
           onClose={() => setMobileOpen(false)}
           ModalProps={{ keepMounted: true }}
           sx={{ display: { xs: 'block', md: 'none' } }}
-          slotProps={{ paper: { sx: { width: drawerWidth, bgcolor: 'background.paper' } } }}
+          slotProps={{ paper: { sx: { width: `min(${drawerWidth}px, 86vw)`, bgcolor: 'background.paper' } } }}
         >
           {drawerContent}
         </Drawer>

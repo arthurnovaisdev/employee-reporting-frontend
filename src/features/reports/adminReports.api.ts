@@ -1,6 +1,6 @@
-import axios from 'axios'
 import { z } from 'zod'
 import { apiClient } from '../../lib/http/apiClient'
+import { getApiErrorMessage } from '../../lib/http/apiError'
 import { reportResponseSchema, reportStatuses } from './protocolConsult'
 
 // Adaptador defensivo, como em categories.api.ts. O documento local ainda não
@@ -61,13 +61,13 @@ export async function updateReportStatus(protocol: string, values: ReportStatusU
 }
 
 export function getAdminReportError(error: unknown) {
-  if (!axios.isAxiosError(error)) return 'Não foi possível ler a resposta do serviço. Tente novamente.'
-  if (!error.response) return 'Não foi possível conectar ao serviço. Verifique sua conexão e tente novamente.'
-  switch (error.response.status) {
-    case 400: return 'Não foi possível concluir a operação. Confira os dados informados e tente novamente.'
-    case 401: return 'Sua sessão expirou. Faça login novamente.'
-    case 403: return 'Você não tem permissão para acessar este recurso.'
-    case 404: return 'Denúncia não encontrada. Atualize a listagem antes de tentar novamente.'
-    default: return 'O serviço está temporariamente indisponível. Tente novamente mais tarde.'
-  }
+  return getApiErrorMessage(error, {
+    defaultMessage: 'Não foi possível ler a resposta do serviço. Tente novamente.',
+    statusMessages: {
+      400: 'Não foi possível concluir a operação. Confira os dados informados e tente novamente.',
+      401: 'Sua sessão expirou. Faça login novamente.',
+      403: 'Você não tem permissão para acessar este recurso.',
+      404: 'Denúncia não encontrada. Atualize a listagem antes de tentar novamente.',
+    },
+  })
 }

@@ -210,7 +210,7 @@ export function ProtocolConsultPage() {
             </Typography>
           </Box>
 
-          {requestError && <Alert severity="error">{requestError}</Alert>}
+          {requestError && <Alert severity="error" aria-live="assertive">{requestError}</Alert>}
 
           <TextField
             {...register('protocol')}

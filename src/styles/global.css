@@ -12,6 +12,7 @@ body,
 body {
   margin: 0;
   min-width: 320px;
+  overflow-wrap: anywhere;
 }
 
 * {
@@ -21,4 +22,21 @@ body {
 input[type='password']::-ms-reveal,
 input[type='password']::-ms-clear {
   display: none;
+}
+
+button,
+a,
+[role='button'] {
+  touch-action: manipulation;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

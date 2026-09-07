@@ -3,6 +3,7 @@ import ContentCopyOutlined from '@mui/icons-material/ContentCopyOutlined'
 import { Alert, Box, Button, Checkbox, FormControlLabel, Paper, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
+import { AppSnackbar, type SnackbarFeedback } from '../../components/feedback/AppSnackbar'
 import { useAuth } from '../../features/auth/AuthContext'
 import { useReportFlow } from '../../features/reports/ReportFlowLayout'
 
@@ -11,7 +12,7 @@ export function ReportSuccessPage() {
   const { session } = useAuth()
   const navigate = useNavigate()
   const [saved, setSaved] = useState(false)
-  const [feedback, setFeedback] = useState<{ text: string; error: boolean } | null>(null)
+  const [feedback, setFeedback] = useState<SnackbarFeedback | null>(null)
 
   if (session?.role === 'ADMIN') return <Navigate to="/admin/reports" replace />
   if (!receipt) return <Navigate to={session ? '/reports/new' : '/login'} replace />
@@ -19,9 +20,9 @@ export function ReportSuccessPage() {
   async function copy(text: string, label: string) {
     try {
       await navigator.clipboard.writeText(text)
-      setFeedback({ text: `${label} copiado para a área de transferência.`, error: false })
+      setFeedback({ message: `${label} copiado para a área de transferência.`, severity: 'success' })
     } catch {
-      setFeedback({ text: 'Não foi possível copiar automaticamente. Selecione e copie as informações abaixo.', error: true })
+      setFeedback({ message: 'Não foi possível copiar automaticamente. Selecione e copie as informações abaixo.', severity: 'error' })
     }
   }
 
@@ -51,10 +52,10 @@ export function ReportSuccessPage() {
           </Box>
         ))}
         <Button variant="outlined" startIcon={<ContentCopyOutlined />} onClick={() => void copy(`Protocolo: ${receipt.protocol}\nCódigo de acompanhamento: ${receipt.trackingCode}`, 'Protocolo e código')}>Copiar ambos</Button>
-        {feedback && <Alert severity={feedback.error ? 'error' : 'success'} role="status">{feedback.text}</Alert>}
         <FormControlLabel control={<Checkbox checked={saved} onChange={(event) => setSaved(event.target.checked)} />} label="Guardei meu protocolo e meu código de acompanhamento." />
         <Button variant="contained" disabled={!saved} onClick={() => navigate(session ? '/home' : '/login', { replace: true })}>{session ? 'Voltar ao início' : 'Entrar novamente'}</Button>
       </Stack>
+      <AppSnackbar feedback={feedback} onClose={() => setFeedback(null)} />
     </Paper>
   )
 }

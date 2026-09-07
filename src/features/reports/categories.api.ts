@@ -1,6 +1,6 @@
-import axios from 'axios'
 import { z } from 'zod'
 import { apiClient } from '../../lib/http/apiClient'
+import { getApiErrorMessage } from '../../lib/http/apiError'
 
 const categorySchema = z.object({ id: z.string().uuid(), name: z.string(), active: z.boolean() })
 const metadataSchema = z.object({
@@ -81,21 +81,11 @@ export async function createCategory(values: CategoryForm) {
 }
 
 export function getCategoryManagementError(error: unknown) {
-  if (!axios.isAxiosError(error)) return 'Não foi possível ler a resposta do serviço. Tente novamente.'
-  if (!error.response) return 'Não foi possível conectar ao serviço. Verifique sua conexão e tente novamente.'
-
-  const body = error.response.data as { erro?: unknown; detalhes?: unknown } | undefined
-  const backendMessage = typeof body?.erro === 'string'
-    ? body.erro
-    : body?.detalhes && typeof body.detalhes === 'object'
-      ? Object.values(body.detalhes).find((message): message is string => typeof message === 'string')
-      : undefined
-
-  switch (error.response.status) {
-    case 400: return backendMessage ?? 'Confira os dados informados e tente novamente.'
-    case 401: return 'Sua sessão expirou. Faça login novamente.'
-    case 403: return 'Você não tem permissão para gerenciar categorias.'
-    case 409: return backendMessage ?? 'Já existe uma categoria com este nome.'
-    default: return 'O serviço está temporariamente indisponível. Tente novamente mais tarde.'
-  }
+  return getApiErrorMessage(error, {
+    defaultMessage: 'Não foi possível ler a resposta do serviço. Tente novamente.',
+    statusMessages: {
+      403: 'Você não tem permissão para gerenciar categorias.',
+      409: 'Já existe uma categoria com este nome.',
+    },
+  })
 }

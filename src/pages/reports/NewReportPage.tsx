@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import ArrowBackOutlined from '@mui/icons-material/ArrowBackOutlined'
 import SendOutlined from '@mui/icons-material/SendOutlined'
-import { Alert, Box, Button, CircularProgress, MenuItem, Paper, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Box, Button, CircularProgress, MenuItem, Paper, Skeleton, Stack, TextField, Typography } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 import { useEffect, useRef, useState } from 'react'
@@ -13,7 +13,7 @@ import { getCategories } from '../../features/reports/categories.api'
 import { useReportFlow } from '../../features/reports/ReportFlowLayout'
 import { reportSchema, toReportRequest, type ReportFormValues } from '../../features/reports/report.schema'
 import { submitReport } from '../../features/reports/reports.api'
-import { getApiErrorMessage } from '../../lib/http/apiError'
+import { getApiErrorMessage, getApiValidationDetails } from '../../lib/http/apiError'
 
 export function NewReportPage() {
   const navigate = useNavigate()
@@ -75,9 +75,9 @@ export function NewReportPage() {
     } catch (failure) {
       if (!mounted.current) return
       if (axios.isAxiosError(failure)) {
-        const details = failure.response?.data?.detalhes
+        const details = getApiValidationDetails(failure)
         for (const field of ['categoryId', 'description', 'incidentDate', 'incidentLocation'] as const) {
-          if (typeof details?.[field] === 'string') setError(field, { type: 'server', message: details[field] })
+          if (details?.[field]) setError(field, { type: 'server', message: details[field] })
         }
       }
       setErrorMessage(getApiErrorMessage(failure))
@@ -104,10 +104,15 @@ export function NewReportPage() {
               Relate o ocorrido com clareza. Categoria e descrição são obrigatórias; os demais campos são opcionais.
             </Typography>
           </Box>
-          {error && <Alert severity="error">{error}</Alert>}
-          {categories.isPending && <Stack direction="row" spacing={1} role="status"><CircularProgress size={18} /><Typography variant="body2">Carregando categorias…</Typography></Stack>}
-          {categories.isError && <Alert severity="error" action={<Button color="inherit" size="small" disabled={categories.isFetching} onClick={() => void categories.refetch()}>Tentar novamente</Button>}>Não foi possível carregar as categorias.</Alert>}
-          {categories.isSuccess && availableCategories.length === 0 && <Alert severity="info">Nenhuma categoria está disponível no momento. Tente novamente mais tarde.</Alert>}
+          {error && <Alert severity="error" aria-live="assertive">{error}</Alert>}
+          {categories.isPending && (
+            <Box role="status" aria-live="polite" aria-label="Carregando categorias">
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Carregando categorias…</Typography>
+              <Skeleton variant="rounded" height={56} aria-hidden="true" />
+            </Box>
+          )}
+          {categories.isError && <Alert severity="error" aria-live="assertive" action={<Button color="inherit" size="small" disabled={categories.isFetching} onClick={() => void categories.refetch()}>{categories.isFetching ? 'Tentando…' : 'Tentar novamente'}</Button>}>{getApiErrorMessage(categories.error, { defaultMessage: 'Não foi possível carregar as categorias.' })}</Alert>}
+          {categories.isSuccess && availableCategories.length === 0 && <Alert severity="info" action={<Button color="inherit" size="small" onClick={() => void categories.refetch()}>Atualizar</Button>}>Nenhuma categoria está disponível no momento.</Alert>}
           <Controller name="categoryId" control={control} render={({ field }) => (
             <TextField {...field} select fullWidth required label="Categoria" disabled={disabled || !categories.isSuccess || !availableCategories.length}
               error={Boolean(errors.categoryId)} helperText={errors.categoryId?.message}>
@@ -122,7 +127,7 @@ export function NewReportPage() {
             <TextField {...register('incidentLocation')} label="Local do ocorrido (opcional)" fullWidth disabled={disabled}
               error={Boolean(errors.incidentLocation)} helperText={errors.incidentLocation?.message} />
           </Stack>
-          <AttachmentPicker files={files} onChange={setFiles} disabled={disabled} onValidating={setValidatingFiles} />
+          <AttachmentPicker files={files} onChange={setFiles} disabled={disabled} validating={validatingFiles} onValidating={setValidatingFiles} />
           <Typography color="text.secondary" variant="body2">Revise as informações antes de enviar. Ao finalizar, guarde o protocolo e o código de acompanhamento para consultar sua denúncia.</Typography>
           {busy && <Alert severity="info" role="status">{stage === 'uploading' ? 'Denúncia registrada. Enviando os anexos…' : 'Registrando sua denúncia…'} Aguarde nesta página.</Alert>}
           <Button type="submit" variant="contained" size="large" disabled={disabled || !categories.isSuccess || !availableCategories.length}

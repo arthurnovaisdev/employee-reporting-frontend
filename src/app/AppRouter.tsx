@@ -26,8 +26,18 @@ export function AppRouter() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const handleUnauthorized = () => navigate('/login', { replace: true })
-    const handleForbidden = () => navigate('/forbidden', { replace: true })
+    const eventMessage = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: unknown }>).detail
+      return typeof detail?.message === 'string' ? detail.message : undefined
+    }
+    const handleUnauthorized = (event: Event) => navigate('/login', {
+      replace: true,
+      state: { authMessage: eventMessage(event) ?? 'Sua sessão expirou. Faça login novamente.' },
+    })
+    const handleForbidden = (event: Event) => navigate('/forbidden', {
+      replace: true,
+      state: { accessMessage: eventMessage(event) },
+    })
 
     window.addEventListener('auth:unauthorized', handleUnauthorized)
     window.addEventListener('auth:forbidden', handleForbidden)

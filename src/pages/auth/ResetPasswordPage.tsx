@@ -25,7 +25,7 @@ import {
   toResetPasswordRequest,
   type ResetPasswordFormValues,
 } from '../../features/auth/passwordForms'
-import { getApiErrorMessage } from '../../lib/http/apiError'
+import { getApiErrorMessage, getApiValidationDetails } from '../../lib/http/apiError'
 
 const missingTokenMessage = 'Este link de recuperação é inválido ou não contém um token.'
 
@@ -46,6 +46,7 @@ export function ResetPasswordPage() {
     register,
     handleSubmit,
     reset,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<ResetPasswordFormValues>({
     resolver: zodResolver(resetPasswordSchema),
@@ -87,6 +88,10 @@ export function ResetPasswordPage() {
         return
       }
 
+      const details = getApiValidationDetails(error)
+      if (details?.newPassword) {
+        setError('newPassword', { type: 'server', message: details.newPassword })
+      }
       setRequestError(getApiErrorMessage(error))
     }
   }
@@ -227,8 +232,8 @@ export function ResetPasswordPage() {
         }}
       />
 
-      <Button type="submit" variant="contained" fullWidth disabled={isSubmitting} sx={{ minHeight: 42 }}>
-        {isSubmitting ? <CircularProgress size={22} color="inherit" /> : 'Redefinir senha'}
+      <Button type="submit" variant="contained" fullWidth disabled={isSubmitting} sx={{ minHeight: 42 }} startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : undefined}>
+        {isSubmitting ? 'Redefinindo…' : 'Redefinir senha'}
       </Button>
     </Stack>
   )

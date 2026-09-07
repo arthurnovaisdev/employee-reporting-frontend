@@ -23,6 +23,7 @@ import {
   registerEmployeeFormSchema,
   type RegisterEmployeeForm,
 } from './users.api'
+import { getApiValidationDetails } from '../../lib/http/apiError'
 
 export function RegisterEmployeeDialog({ onClose, onCreated }: {
   onClose: () => void
@@ -34,6 +35,7 @@ export function RegisterEmployeeDialog({ onClose, onCreated }: {
     register,
     handleSubmit,
     reset,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<RegisterEmployeeForm>({
     resolver: zodResolver(registerEmployeeFormSchema),
@@ -47,12 +49,16 @@ export function RegisterEmployeeDialog({ onClose, onCreated }: {
       reset()
       onCreated()
     } catch (error) {
+      const details = getApiValidationDetails(error)
+      for (const field of ['name', 'cpf', 'contactEmail', 'password'] as const) {
+        if (details?.[field]) setError(field, { type: 'server', message: details[field] })
+      }
       setRequestError(getUserManagementError(error))
     }
   }
 
   return (
-    <Dialog open fullWidth maxWidth="sm" onClose={() => { if (!isSubmitting) onClose() }} aria-labelledby="register-employee-title">
+    <Dialog open fullWidth maxWidth="sm" onClose={() => { if (!isSubmitting) onClose() }} aria-labelledby="register-employee-title" aria-describedby="register-employee-description">
       <DialogTitle id="register-employee-title">Cadastrar funcionário</DialogTitle>
       <DialogContent dividers>
         <Stack
@@ -64,10 +70,10 @@ export function RegisterEmployeeDialog({ onClose, onCreated }: {
           aria-busy={isSubmitting}
           sx={{ pt: 0.5 }}
         >
-          <Typography color="text.secondary" variant="body2">
+          <Typography id="register-employee-description" color="text.secondary" variant="body2">
             A nova conta será criada como funcionário e deverá trocar a senha provisória no primeiro acesso.
           </Typography>
-          {requestError && <Alert severity="error" aria-live="polite">{requestError}</Alert>}
+          {requestError && <Alert severity="error" aria-live="assertive">{requestError}</Alert>}
           <TextField
             {...register('name')}
             label="Nome completo"
@@ -137,7 +143,7 @@ export function RegisterEmployeeDialog({ onClose, onCreated }: {
           disabled={isSubmitting}
           startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : undefined}
         >
-          Cadastrar funcionário
+          {isSubmitting ? 'Cadastrando…' : 'Cadastrar funcionário'}
         </Button>
       </DialogActions>
     </Dialog>

@@ -8,11 +8,13 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Skeleton,
   Stack,
   Typography,
 } from '@mui/material'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
+import { AppSnackbar, type SnackbarFeedback } from '../../components/feedback/AppSnackbar'
 import {
   getUser,
   getUserManagementError,
@@ -37,7 +39,7 @@ export function AdminUserDetail({ selectedUser, onClose, onChanged }: {
   const queryClient = useQueryClient()
   const [confirmationOpen, setConfirmationOpen] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<SnackbarFeedback | null>(null)
   const [saving, setSaving] = useState(false)
   const submitting = useRef(false)
   const query = useQuery({
@@ -54,7 +56,7 @@ export function AdminUserDetail({ selectedUser, onClose, onChanged }: {
     submitting.current = true
     setSaving(true)
     setActionError(null)
-    setSuccessMessage(null)
+    setFeedback(null)
 
     try {
       await setUserActive(user.id, nextActive)
@@ -65,9 +67,12 @@ export function AdminUserDetail({ selectedUser, onClose, onChanged }: {
         users: current.users.map((listedUser) => listedUser.id === updated.id ? updated : listedUser),
       }))
       onChanged(updated)
-      setSuccessMessage(nextActive ? 'Usuário ativado com sucesso.' : 'Usuário desativado com sucesso.')
+      setFeedback({
+        severity: 'success',
+        message: nextActive ? 'Usuário ativado com sucesso.' : 'Usuário desativado com sucesso.',
+      })
       setConfirmationOpen(false)
-      await Promise.all([
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin-users'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-user', user.id] }),
       ])
@@ -86,14 +91,22 @@ export function AdminUserDetail({ selectedUser, onClose, onChanged }: {
         <DialogContent dividers>
           <Stack spacing={2.5}>
             {query.isFetching && !query.data && (
-              <Stack direction="row" spacing={1.5} role="status" sx={{ alignItems: 'center' }}>
-                <CircularProgress size={20} />
-                <Typography>Carregando informações atualizadas…</Typography>
+              <Stack spacing={1} role="status" aria-live="polite" aria-label="Carregando informações atualizadas">
+                <Typography variant="body2" color="text.secondary">Carregando informações atualizadas…</Typography>
+                <Skeleton variant="text" width="55%" height={32} aria-hidden="true" />
+                <Skeleton variant="rounded" height={120} aria-hidden="true" />
               </Stack>
             )}
-            {query.isError && <Alert severity="error">{getUserManagementError(query.error)}</Alert>}
-            {actionError && <Alert severity="error" aria-live="polite">{actionError}</Alert>}
-            {successMessage && <Alert severity="success" aria-live="polite">{successMessage}</Alert>}
+            {query.isError && (
+              <Alert
+                severity="error"
+                aria-live="assertive"
+                action={<Button color="inherit" size="small" disabled={query.isFetching} onClick={() => void query.refetch()}>{query.isFetching ? 'Tentando…' : 'Tentar novamente'}</Button>}
+              >
+                {getUserManagementError(query.error)}
+              </Alert>
+            )}
+            {actionError && <Alert severity="error" aria-live="assertive">{actionError}</Alert>}
 
             <Box>
               <Typography component="h2" variant="h6" sx={{ overflowWrap: 'anywhere' }}>{user.name}</Typography>
@@ -123,16 +136,16 @@ export function AdminUserDetail({ selectedUser, onClose, onChanged }: {
             </Button>
           ) : (
             <Button variant="contained" onClick={() => void changeActive(true)} disabled={saving || query.isFetching || query.isError} startIcon={saving ? <CircularProgress size={18} color="inherit" /> : undefined}>
-              Ativar usuário
+              {saving ? 'Ativando…' : 'Ativar usuário'}
             </Button>
           )}
         </DialogActions>
       </Dialog>
 
-      <Dialog open={confirmationOpen} onClose={() => { if (!saving) setConfirmationOpen(false) }} maxWidth="xs" fullWidth aria-labelledby="deactivate-user-title">
+      <Dialog open={confirmationOpen} onClose={() => { if (!saving) setConfirmationOpen(false) }} maxWidth="xs" fullWidth aria-labelledby="deactivate-user-title" aria-describedby="deactivate-user-description">
         <DialogTitle id="deactivate-user-title">Desativar este usuário?</DialogTitle>
         <DialogContent>
-          <Typography>
+          <Typography id="deactivate-user-description">
             {user.name} poderá perder o acesso ao sistema. Sessões já emitidas podem permanecer válidas até expirarem, conforme o comportamento atual do serviço.
           </Typography>
           {actionError && <Alert severity="error" sx={{ mt: 2 }}>{actionError}</Alert>}
@@ -140,10 +153,11 @@ export function AdminUserDetail({ selectedUser, onClose, onChanged }: {
         <DialogActions>
           <Button onClick={() => setConfirmationOpen(false)} disabled={saving}>Cancelar</Button>
           <Button color="warning" variant="contained" onClick={() => void changeActive(false)} disabled={saving} startIcon={saving ? <CircularProgress size={18} color="inherit" /> : undefined}>
-            Confirmar desativação
+            {saving ? 'Desativando…' : 'Confirmar desativação'}
           </Button>
         </DialogActions>
       </Dialog>
+      <AppSnackbar feedback={feedback} onClose={() => setFeedback(null)} />
     </>
   )
 }

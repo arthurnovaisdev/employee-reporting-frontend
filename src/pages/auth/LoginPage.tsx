@@ -14,12 +14,12 @@ import {
   Typography,
 } from '@mui/material'
 import { Controller, useForm } from 'react-hook-form'
-import { Link as RouterLink, useNavigate } from 'react-router-dom'
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 import { useState } from 'react'
 import { login } from '../../features/auth/auth.api'
 import { useAuth } from '../../features/auth/AuthContext'
-import { getApiErrorMessage } from '../../lib/http/apiError'
+import { getApiErrorMessage, getApiValidationDetails } from '../../lib/http/apiError'
 
 const loginSchema = z.object({
   cpf: z.string().regex(/^\d{11}$/, 'Informe um CPF com 11 dígitos.'),
@@ -45,12 +45,17 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [requestError, setRequestError] = useState<string | null>(null)
   const navigate = useNavigate()
+  const location = useLocation()
   const { startSession } = useAuth()
+  const authMessage = typeof (location.state as { authMessage?: unknown } | null)?.authMessage === 'string'
+    ? (location.state as { authMessage: string }).authMessage
+    : null
   const {
     control,
     register,
     handleSubmit,
     resetField,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -76,6 +81,10 @@ export function LoginPage() {
       navigate(session.role === 'ADMIN' ? '/admin/reports' : '/home', { replace: true })
     } catch (error) {
       resetField('password')
+      const details = getApiValidationDetails(error)
+      for (const field of ['cpf', 'password'] as const) {
+        if (details?.[field]) setError(field, { type: 'server', message: details[field] })
+      }
       setRequestError(getApiErrorMessage(error))
     }
   }
@@ -112,9 +121,9 @@ export function LoginPage() {
           </Typography>
         </Box>
 
-        {requestError && (
+        {(requestError || authMessage) && (
           <Alert severity="error" aria-live="polite">
-            {requestError}
+            {requestError ?? authMessage}
           </Alert>
         )}
 
@@ -174,8 +183,9 @@ export function LoginPage() {
           fullWidth
           disabled={isSubmitting}
           sx={{ minHeight: 42 }}
+          startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : undefined}
         >
-          {isSubmitting ? <CircularProgress size={22} color="inherit" /> : 'Entrar'}
+          {isSubmitting ? 'Entrando…' : 'Entrar'}
         </Button>
 
         <RouterLink

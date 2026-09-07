@@ -4,13 +4,15 @@ import {
   Box,
   Button,
   Chip,
-  CircularProgress,
   Paper,
   Stack,
   Typography,
 } from '@mui/material'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { AppSnackbar, type SnackbarFeedback } from '../../components/feedback/AppSnackbar'
+import { EmptyState, ListPageSkeleton, QueryErrorState, RefreshProgress } from '../../components/feedback/AsyncStates'
+import { PagePagination } from '../../components/navigation/PagePagination'
 import { useAuth } from '../../features/auth/AuthContext'
 import { AdminUserDetail, formatCpf } from '../../features/users/AdminUserDetail'
 import { RegisterEmployeeDialog } from '../../features/users/RegisterEmployeeDialog'
@@ -27,7 +29,7 @@ export function AdminUsersPage() {
   const [page, setPage] = useState(0)
   const [selectedUser, setSelectedUser] = useState<UserResponseDTO | null>(null)
   const [registerOpen, setRegisterOpen] = useState(false)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<SnackbarFeedback | null>(null)
   const query = useQuery({
     queryKey: ['admin-users', page],
     queryFn: ({ signal }) => getUsers(page, signal),
@@ -49,7 +51,7 @@ export function AdminUsersPage() {
 
   function onEmployeeCreated() {
     setRegisterOpen(false)
-    setSuccessMessage('Funcionário cadastrado com sucesso.')
+    setFeedback({ severity: 'success', message: 'Funcionário cadastrado com sucesso.' })
     if (page !== 0) setPage(0)
     void queryClient.invalidateQueries({ queryKey: ['admin-users'] })
   }
@@ -64,20 +66,15 @@ export function AdminUsersPage() {
             Cadastre funcionários, consulte seus dados e controle o acesso ao sistema.
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<PersonAddAltOutlined />} onClick={() => { setSuccessMessage(null); setRegisterOpen(true) }}>
+        <Button variant="contained" startIcon={<PersonAddAltOutlined />} onClick={() => { setFeedback(null); setRegisterOpen(true) }} sx={{ width: { xs: '100%', sm: 'auto' } }}>
           Cadastrar funcionário
         </Button>
       </Stack>
 
-      {successMessage && <Alert severity="success" onClose={() => setSuccessMessage(null)} sx={{ mt: 3 }}>{successMessage}</Alert>}
-      {query.isError && <Alert severity="error" sx={{ mt: 3 }}>{getUserManagementError(query.error)}</Alert>}
+      {query.isError && <QueryErrorState message={getUserManagementError(query.error)} onRetry={() => void query.refetch()} retrying={query.isFetching} />}
       {query.isError && page > 0 && <Button sx={{ mt: 1 }} onClick={() => setPage(0)}>Voltar à primeira página</Button>}
-      {query.isFetching && (
-        <Stack direction="row" spacing={1.5} role="status" sx={{ mt: 3, alignItems: 'center' }}>
-          <CircularProgress size={20} />
-          <Typography>Carregando usuários…</Typography>
-        </Stack>
-      )}
+      {query.isPending && <ListPageSkeleton label="Carregando usuários…" />}
+      {query.isFetching && data && <RefreshProgress label="Atualizando usuários…" />}
 
       {data && !query.isError && (
         <>
@@ -92,7 +89,7 @@ export function AdminUsersPage() {
           </Stack>
 
           {data.users.length === 0 ? (
-            <Paper sx={{ p: 4 }}><Typography>Nenhum usuário nesta página.</Typography></Paper>
+            <EmptyState title="Nenhum usuário nesta página" description="Os usuários cadastrados aparecerão aqui em ordem alfabética." />
           ) : (
             <Stack component="ul" spacing={1.5} sx={{ p: 0, m: 0, listStyle: 'none' }} aria-label="Usuários cadastrados" aria-busy={query.isFetching}>
               {data.users.map((user) => (
@@ -101,7 +98,7 @@ export function AdminUsersPage() {
                     component="button"
                     type="button"
                     disabled={query.isFetching}
-                    onClick={() => { setSuccessMessage(null); setSelectedUser(user) }}
+                    onClick={() => { setFeedback(null); setSelectedUser(user) }}
                     sx={{
                       display: 'block',
                       width: '100%',
@@ -137,13 +134,15 @@ export function AdminUsersPage() {
             </Stack>
           )}
 
-          <Stack component="nav" aria-label="Paginação de usuários" direction="row" sx={{ mt: 3, alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-            <Button variant="outlined" disabled={query.isFetching || data.number === 0} onClick={() => setPage(data.number - 1)}>Anterior</Button>
-            <Typography role="status" variant="body2">
-              {data.totalPages === 0 ? 'Nenhuma página' : `Página ${data.number + 1}${data.totalPages !== undefined ? ` de ${data.totalPages}` : ''}`}
-            </Typography>
-            <Button variant="outlined" disabled={query.isFetching || data.hasNext !== true} onClick={() => setPage(data.number + 1)}>Próxima</Button>
-          </Stack>
+          <PagePagination
+            label="Paginação de usuários"
+            page={data.number}
+            totalPages={data.totalPages}
+            hasNext={data.hasNext}
+            disabled={query.isFetching}
+            onPrevious={() => setPage(data.number - 1)}
+            onNext={() => setPage(data.number + 1)}
+          />
           {data.hasNext === undefined && <Alert severity="info" sx={{ mt: 2 }}>Não foi possível determinar se há mais páginas. Tente atualizar a lista.</Alert>}
         </>
       )}
@@ -157,6 +156,7 @@ export function AdminUsersPage() {
         />
       )}
       {registerOpen && <RegisterEmployeeDialog onClose={() => setRegisterOpen(false)} onCreated={onEmployeeCreated} />}
+      <AppSnackbar feedback={feedback} onClose={() => setFeedback(null)} />
     </Box>
   )
 }

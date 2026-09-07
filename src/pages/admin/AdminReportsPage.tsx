@@ -1,6 +1,9 @@
-import { Alert, Box, Button, Chip, CircularProgress, Paper, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, Chip, Paper, Stack, Typography } from '@mui/material'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { AppSnackbar, type SnackbarFeedback } from '../../components/feedback/AppSnackbar'
+import { EmptyState, ListPageSkeleton, QueryErrorState, RefreshProgress } from '../../components/feedback/AsyncStates'
+import { PagePagination } from '../../components/navigation/PagePagination'
 import { useAuth } from '../../features/auth/AuthContext'
 import { AdminReportDetail } from '../../features/reports/AdminReportDetail'
 import { getAdminReports, getAdminReportError, type AdminReportPage } from '../../features/reports/adminReports.api'
@@ -10,7 +13,7 @@ export function AdminReportsPage() {
   const { session } = useAuth()
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<ReportResponseDTO | null>(null)
-  const [success, setSuccess] = useState(false)
+  const [feedback, setFeedback] = useState<SnackbarFeedback | null>(null)
   const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: ['admin-reports', page],
@@ -29,7 +32,7 @@ export function AdminReportsPage() {
       reports: current.reports.map((report) => report.protocol === updated.protocol ? updated : report),
     }))
     setSelected(null)
-    setSuccess(true)
+    setFeedback({ severity: 'success', message: 'Alteração de status salva.' })
     void queryClient.invalidateQueries({ queryKey: ['admin-reports'] })
   }
 
@@ -41,14 +44,12 @@ export function AdminReportsPage() {
           <Typography component="h1" variant="h4">Denúncias</Typography>
           <Typography color="text.secondary" sx={{ mt: 1 }}>Consulte os relatos recebidos e atualize seu andamento.</Typography>
         </Box>
-        <Button variant="outlined" onClick={() => void query.refetch()} disabled={query.isFetching || Boolean(selected)}>Atualizar lista</Button>
+        <Button variant="outlined" onClick={() => void query.refetch()} disabled={query.isFetching || Boolean(selected)} sx={{ width: { xs: '100%', sm: 'auto' } }}>Atualizar lista</Button>
       </Stack>
-      {success && <Alert severity="success" onClose={() => setSuccess(false)} sx={{ mt: 3 }}>Alteração de status salva.</Alert>}
-      {query.isError && <Alert severity="error" sx={{ mt: 3 }}>{getAdminReportError(query.error)}</Alert>}
+      {query.isError && <QueryErrorState message={getAdminReportError(query.error)} onRetry={() => void query.refetch()} retrying={query.isFetching} />}
       {query.isError && page > 0 && <Button sx={{ mt: 1 }} onClick={() => setPage(0)}>Voltar à primeira página</Button>}
-      {query.isFetching && <Stack direction="row" spacing={1.5} role="status" sx={{ mt: 3, alignItems: 'center' }}>
-        <CircularProgress size={20} /><Typography>Carregando denúncias…</Typography>
-      </Stack>}
+      {query.isPending && <ListPageSkeleton label="Carregando denúncias…" />}
+      {query.isFetching && data && <RefreshProgress label="Atualizando denúncias…" />}
       {data && !query.isError && (
         <>
           <Stack direction="row" spacing={2} sx={{ mt: 3, mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -58,10 +59,10 @@ export function AdminReportsPage() {
             </Paper>}
             <Typography variant="body2" color="text.secondary">10 denúncias por página</Typography>
           </Stack>
-          {data.reports.length === 0 ? <Paper sx={{ p: 4 }}><Typography>Nenhuma denúncia nesta página.</Typography></Paper> : (
+          {data.reports.length === 0 ? <EmptyState title="Nenhuma denúncia nesta página" description="Quando houver relatos nesta página, eles aparecerão aqui." /> : (
             <Stack component="ul" spacing={1.5} sx={{ p: 0, m: 0, listStyle: 'none' }} aria-label="Denúncias recebidas" aria-busy={query.isFetching}>
               {data.reports.map((report) => <Paper component="li" key={report.protocol} sx={{ overflow: 'hidden' }}>
-                <Box component="button" type="button" disabled={query.isFetching} onClick={() => { setSuccess(false); setSelected(report) }}
+                <Box component="button" type="button" disabled={query.isFetching} onClick={() => { setFeedback(null); setSelected(report) }}
                   sx={{ display: 'block', width: '100%', textAlign: 'left', color: 'text.primary', bgcolor: 'transparent', border: 0, p: { xs: 2, sm: 2.5 }, font: 'inherit', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '-2px' } }}>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
                     <Typography sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}>{report.protocol}</Typography>
@@ -74,17 +75,20 @@ export function AdminReportsPage() {
               </Paper>)}
             </Stack>
           )}
-          <Stack component="nav" aria-label="Paginação de denúncias" direction="row" sx={{ mt: 3, alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-            <Button variant="outlined" disabled={query.isFetching || data.number === 0} onClick={() => { setSuccess(false); setPage(data.number - 1) }}>Anterior</Button>
-            <Typography role="status" variant="body2">
-              {data.totalPages === 0 ? 'Nenhuma página' : `Página ${data.number + 1}${data.totalPages !== undefined ? ` de ${data.totalPages}` : ''}`}
-            </Typography>
-            <Button variant="outlined" disabled={query.isFetching || data.hasNext !== true} onClick={() => { setSuccess(false); setPage(data.number + 1) }}>Próxima</Button>
-          </Stack>
+          <PagePagination
+            label="Paginação de denúncias"
+            page={data.number}
+            totalPages={data.totalPages}
+            hasNext={data.hasNext}
+            disabled={query.isFetching}
+            onPrevious={() => { setFeedback(null); setPage(data.number - 1) }}
+            onNext={() => { setFeedback(null); setPage(data.number + 1) }}
+          />
           {data.hasNext === undefined && <Alert severity="info" sx={{ mt: 2 }}>Não foi possível determinar se há mais páginas. Tente atualizar a lista.</Alert>}
         </>
       )}
       {selected && <AdminReportDetail key={selected.protocol} report={selected} onClose={() => setSelected(null)} onUpdated={onUpdated} />}
+      <AppSnackbar feedback={feedback} onClose={() => setFeedback(null)} />
     </Box>
   )
 }

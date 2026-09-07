@@ -1,6 +1,6 @@
 import AttachFileOutlined from '@mui/icons-material/AttachFileOutlined'
 import CloseOutlined from '@mui/icons-material/CloseOutlined'
-import { Alert, Box, Button, IconButton, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, CircularProgress, IconButton, Stack, Typography } from '@mui/material'
 import { useRef, useState } from 'react'
 import { attachmentMimeTypes, validateAttachments } from './attachments'
 
@@ -8,10 +8,11 @@ interface AttachmentPickerProps {
   files: File[]
   onChange: (files: File[]) => void
   disabled: boolean
+  validating?: boolean
   onValidating: (validating: boolean) => void
 }
 
-export function AttachmentPicker({ files, onChange, disabled, onValidating }: AttachmentPickerProps) {
+export function AttachmentPicker({ files, onChange, disabled, validating = false, onValidating }: AttachmentPickerProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -45,11 +46,11 @@ export function AttachmentPicker({ files, onChange, disabled, onValidating }: At
           if (selected.length) void selectFiles(selected)
         }}
       />
-      <Button variant="outlined" startIcon={<AttachFileOutlined />} disabled={disabled}
+      <Button variant="outlined" startIcon={validating ? <CircularProgress size={18} color="inherit" /> : <AttachFileOutlined />} disabled={disabled}
         onClick={() => inputRef.current?.click()} sx={{ borderStyle: 'dashed', minHeight: 48 }}>
-        Adicionar arquivos
+        {validating ? 'Verificando arquivos…' : 'Adicionar arquivos'}
       </Button>
-      {error && <Alert severity="error">{error} A seleção anterior foi mantida.</Alert>}
+      {error && <Alert severity="error" aria-live="assertive">{error} A seleção anterior foi mantida.</Alert>}
       {files.length > 0 && (
         <Stack component="ul" aria-label="Arquivos selecionados" spacing={1} sx={{ m: 0, p: 0, listStyle: 'none' }}>
           {files.map((file, index) => (

@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { apiBaseUrl } from '../../config/env'
 import { getAccessToken, setAccessToken } from '../../features/auth/tokenStore'
+import { getApiErrorMessage } from './apiError'
 
 declare module 'axios' {
   interface AxiosRequestConfig {
@@ -15,6 +16,10 @@ const publicPaths = [
   '/auth/reset-password',
 ]
 
+function isPublicRequest(url?: string) {
+  return publicPaths.some((path) => url?.startsWith(path))
+}
+
 export const apiClient = axios.create({
   baseURL: apiBaseUrl,
   headers: {
@@ -23,10 +28,9 @@ export const apiClient = axios.create({
 })
 
 apiClient.interceptors.request.use((config) => {
-  const isPublicRequest = publicPaths.some((path) => config.url?.startsWith(path))
   const token = getAccessToken()
 
-  if (token && !isPublicRequest) {
+  if (token && !isPublicRequest(config.url)) {
     config.headers.set('Authorization', `Bearer ${token}`)
   }
 
@@ -39,13 +43,19 @@ apiClient.interceptors.response.use(
     if (error.config?.handleAuthErrorLocally) {
       return Promise.reject(error)
     }
-    if (error.response?.status === 401) {
+
+    const publicRequest = isPublicRequest(error.config?.url)
+    if (!publicRequest && error.response?.status === 401) {
       setAccessToken(null)
-      window.dispatchEvent(new Event('auth:unauthorized'))
+      window.dispatchEvent(new CustomEvent('auth:unauthorized', {
+        detail: { message: getApiErrorMessage(error) },
+      }))
     }
 
-    if (error.response?.status === 403) {
-      window.dispatchEvent(new Event('auth:forbidden'))
+    if (!publicRequest && error.response?.status === 403) {
+      window.dispatchEvent(new CustomEvent('auth:forbidden', {
+        detail: { message: getApiErrorMessage(error) },
+      }))
     }
 
     return Promise.reject(error)

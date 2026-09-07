@@ -13,7 +13,7 @@ import {
   toForgotPasswordRequest,
   type ForgotPasswordFormValues,
 } from '../../features/auth/passwordForms'
-import { getApiErrorMessage } from '../../lib/http/apiError'
+import { getApiErrorMessage, getApiValidationDetails } from '../../lib/http/apiError'
 
 export function ForgotPasswordPage() {
   const [sent, setSent] = useState(false)
@@ -22,6 +22,7 @@ export function ForgotPasswordPage() {
     control,
     handleSubmit,
     reset,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<ForgotPasswordFormValues>({
     resolver: zodResolver(forgotPasswordSchema),
@@ -36,6 +37,8 @@ export function ForgotPasswordPage() {
       reset()
       setSent(true)
     } catch (error) {
+      const details = getApiValidationDetails(error)
+      if (details?.cpf) setError('cpf', { type: 'server', message: details.cpf })
       setRequestError(getApiErrorMessage(error))
     }
   }
@@ -124,8 +127,8 @@ export function ForgotPasswordPage() {
         )}
       />
 
-      <Button type="submit" variant="contained" fullWidth disabled={isSubmitting} sx={{ minHeight: 42 }}>
-        {isSubmitting ? <CircularProgress size={22} color="inherit" /> : 'Enviar instruções'}
+      <Button type="submit" variant="contained" fullWidth disabled={isSubmitting} sx={{ minHeight: 42 }} startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : undefined}>
+        {isSubmitting ? 'Enviando…' : 'Enviar instruções'}
       </Button>
 
       <Button
