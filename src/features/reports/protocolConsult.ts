@@ -40,7 +40,7 @@ export const protocolConsultSchema = z.object({
 
 export type ProtocolConsultFormValues = z.infer<typeof protocolConsultSchema>
 
-const reportResponseSchema = z.object({
+export const reportResponseSchema = z.object({
   protocol: z.string().min(1),
   category: z.string().min(1),
   description: z.string(),

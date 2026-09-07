@@ -84,6 +84,7 @@ export function AppRouter() {
             <Route element={<RoleRoute allowedRoles={['ADMIN']} />}>
               <Route path="/admin/reports" element={<AdminReportsPage />} />
               <Route path="/admin/users" element={<AdminUsersPage />} />
+              <Route path="/admin/*" element={<Navigate to="/admin/reports" replace />} />
             </Route>
           </Route>
         </Route>

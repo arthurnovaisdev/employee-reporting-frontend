@@ -544,6 +544,16 @@ Rotas administrativas devem possuir proteção no frontend, mas a autorização 
 
 ---
 
+## 21.1 Painel administrativo de denúncias no frontend
+
+`/admin/reports` é protegido para ADMIN e lista os cinco campos de `ReportResponseDTO`. O frontend envia somente `page` e `size=10`, preservando a ordem retornada; não envia `sort` nem oferece seletor de ordenação, conforme a orientação atual do responsável pelo projeto de que o backend ordena por `createdAt DESC`.
+
+O arquivo local `CONTEXT_BACKEND.md` ainda contém a descrição anterior de ordenação e deixa a serialização de `Page<T>` pendente. O adaptador administrativo valida em runtime o conteúdo e metadados na raiz ou em `page`, como o adaptador de categorias existente. Totais só são exibidos quando recebidos; próxima página só é habilitada com indicação válida de continuidade. Esses formatos ainda precisam ser confirmados com uma resposta real, e os testes usam fixtures identificadas como simulações.
+
+O detalhe abre em um diálogo com o item da listagem, sem endpoint GET individual. A alteração usa PATCH `/api/reports/admin/{protocol}/status` com `newStatus` e `note` opcional, limitada a 2.000 caracteres. A confirmação antecede o envio; após sucesso o DTO retornado atualiza a lista, que é reconsultada. O formulário impede salvar o mesmo status porque o backend não grava a observação nesse caso. Observações anteriores, histórico e anexos não são apresentados por falta de endpoints de leitura. Os dados administrativos permanecem em memória e o cache da página é descartado quando deixa de ser usado.
+
+---
+
 # 22. Gestão de usuários
 
 Administradores podem gerenciar funcionários.
