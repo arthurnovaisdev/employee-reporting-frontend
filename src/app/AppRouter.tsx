@@ -20,6 +20,7 @@ import { NewReportPage } from '../pages/reports/NewReportPage'
 import { ProtocolConsultPage } from '../pages/reports/ProtocolConsultPage'
 import { ReportSuccessPage } from '../pages/reports/ReportSuccessPage'
 import { ReportFlowLayout, ReportFlowShell } from '../features/reports/ReportFlowLayout'
+import { AdminCategoriesPage } from '../pages/admin/AdminCategoriesPage'
 
 export function AppRouter() {
   const navigate = useNavigate()
@@ -84,6 +85,7 @@ export function AppRouter() {
             <Route element={<RoleRoute allowedRoles={['ADMIN']} />}>
               <Route path="/admin/reports" element={<AdminReportsPage />} />
               <Route path="/admin/users" element={<AdminUsersPage />} />
+              <Route path="/admin/categories" element={<AdminCategoriesPage />} />
               <Route path="/admin/*" element={<Navigate to="/admin/reports" replace />} />
             </Route>
           </Route>
