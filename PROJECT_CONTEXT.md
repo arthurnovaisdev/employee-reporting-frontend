@@ -319,6 +319,16 @@ O fluxo geral é:
 
 A implementação exata do token, validade e endpoints deve ser consultada no `CONTEXT_BACKEND.md`.
 
+## 11.1 Implementação dos fluxos de senha no frontend
+
+O fluxo em `/forgot-password` solicita somente o CPF e envia o `ForgotPasswordRequestDTO` para o endpoint documentado. A tela informa o envio do link sem revelar o endereço de contato e apresenta os erros de usuário inexistente ou sem e-mail conforme a resposta atual do backend.
+
+Em `/reset-password`, o token é lido da query string, mantido apenas na memória da página e removido da barra de endereço. O formulário possui nova senha e confirmação local, mas envia somente `token` e `newPassword`. Token inválido, expirado ou já utilizado encerra a tentativa e oferece a solicitação de um novo link. Após sucesso, senha, confirmação, token temporário e eventual sessão local são descartados antes do retorno ao login.
+
+A troca autenticada usa `PATCH /api/users/me/password` com somente `currentPassword` e `newPassword`. A confirmação existe apenas no formulário e nunca é enviada. Sessões com `passwordChanged=false`, independentemente da role, permanecem restritas à troca obrigatória; após HTTP 204, a flag local é atualizada e o usuário segue para a área correspondente à sua role.
+
+As senhas permanecem somente no estado temporário dos formulários e durante a requisição. Não são gravadas em storage, cookies, URLs, logs ou caches de mutation.
+
 ---
 
 # 12. Denúncias

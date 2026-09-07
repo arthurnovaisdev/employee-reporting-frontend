@@ -2,6 +2,7 @@ import AccountCircleOutlined from '@mui/icons-material/AccountCircleOutlined'
 import AddBoxOutlined from '@mui/icons-material/AddBoxOutlined'
 import AssignmentOutlined from '@mui/icons-material/AssignmentOutlined'
 import HomeOutlined from '@mui/icons-material/HomeOutlined'
+import KeyOutlined from '@mui/icons-material/KeyOutlined'
 import LogoutOutlined from '@mui/icons-material/LogoutOutlined'
 import MenuIcon from '@mui/icons-material/Menu'
 import PeopleOutlined from '@mui/icons-material/PeopleOutlined'
@@ -50,6 +51,12 @@ const navigationItems: NavigationItem[] = [
     roles: ['ADMIN'],
   },
   { label: 'Usuários', path: '/admin/users', icon: <PeopleOutlined />, roles: ['ADMIN'] },
+  {
+    label: 'Alterar senha',
+    path: '/change-password',
+    icon: <KeyOutlined />,
+    roles: ['EMPLOYEE', 'ADMIN'],
+  },
 ]
 
 export function AppShell({ navigationDisabled = false }: { navigationDisabled?: boolean }) {

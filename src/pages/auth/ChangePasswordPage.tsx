@@ -13,62 +13,53 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
-import { z } from 'zod'
 import { changePassword } from '../../features/auth/auth.api'
 import { useAuth } from '../../features/auth/AuthContext'
+import {
+  changePasswordSchema,
+  toChangePasswordRequest,
+  type ChangePasswordFormValues,
+} from '../../features/auth/passwordForms'
 import { getApiErrorMessage } from '../../lib/http/apiError'
-
-const changePasswordSchema = z
-  .object({
-    currentPassword: z.string().refine((value) => value.trim().length > 0, 'Informe a senha atual.'),
-    newPassword: z
-      .string()
-      .min(8, 'A nova senha deve ter entre 8 e 100 caracteres.')
-      .max(100, 'A nova senha deve ter entre 8 e 100 caracteres.')
-      .refine((value) => value.trim().length > 0, 'Informe a nova senha.'),
-  })
-  .refine((values) => values.currentPassword !== values.newPassword, {
-    message: 'A nova senha deve ser diferente da senha atual.',
-    path: ['newPassword'],
-  })
-
-type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>
 
 export function ChangePasswordPage() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmation, setShowConfirmation] = useState(false)
+  const [requestError, setRequestError] = useState<string | null>(null)
   const navigate = useNavigate()
   const { endSession, markPasswordChanged, session } = useAuth()
+  const firstAccess = session?.passwordChanged === false
   const {
     register,
     handleSubmit,
     reset,
-    resetField,
-    formState: { errors },
+    formState: { errors, isSubmitting },
   } = useForm<ChangePasswordFormValues>({
     resolver: zodResolver(changePasswordSchema),
     defaultValues: {
       currentPassword: '',
       newPassword: '',
+      confirmNewPassword: '',
     },
   })
 
-  const changePasswordMutation = useMutation({
-    mutationFn: changePassword,
-    onSuccess: () => {
+  async function onSubmit(values: ChangePasswordFormValues) {
+    setRequestError(null)
+
+    try {
+      await changePassword(toChangePasswordRequest(values))
       reset()
       markPasswordChanged()
       navigate(session?.role === 'ADMIN' ? '/admin/reports' : '/home', { replace: true })
-    },
-    onError: () => {
-      resetField('currentPassword')
-      resetField('newPassword')
-    },
-  })
+    } catch (error) {
+      reset()
+      setRequestError(getApiErrorMessage(error))
+    }
+  }
 
   const passwordAdornment = (visible: boolean, toggle: () => void) => (
     <InputAdornment position="end">
@@ -76,6 +67,7 @@ export function ChangePasswordPage() {
         onClick={toggle}
         edge="end"
         aria-label={visible ? 'Ocultar senha' : 'Mostrar senha'}
+        disabled={isSubmitting}
       >
         {visible ? <VisibilityOffOutlined /> : <VisibilityOutlined />}
       </IconButton>
@@ -86,7 +78,8 @@ export function ChangePasswordPage() {
     <Box
       component="form"
       noValidate
-      onSubmit={handleSubmit((values) => changePasswordMutation.mutate(values))}
+      onSubmit={handleSubmit(onSubmit, () => setRequestError(null))}
+      aria-busy={isSubmitting}
       sx={{ width: '100%' }}
     >
       <Stack spacing={2.25}>
@@ -106,13 +99,15 @@ export function ChangePasswordPage() {
             <KeyOutlined />
           </Box>
           <Typography variant="overline" color="primary.main" sx={{ fontWeight: 700 }}>
-            Primeiro acesso
+            {firstAccess ? 'Primeiro acesso' : 'Segurança da conta'}
           </Typography>
           <Typography component="h1" variant="h5">
-            Atualize sua senha
+            {firstAccess ? 'Atualize sua senha' : 'Alterar senha'}
           </Typography>
           <Typography color="text.secondary" sx={{ mt: 0.75, fontSize: '0.9rem' }}>
-            Esta alteração é obrigatória antes de continuar.
+            {firstAccess
+              ? 'Esta alteração é obrigatória antes de continuar.'
+              : 'Defina uma nova senha para sua conta.'}
           </Typography>
         </Box>
 
@@ -120,9 +115,9 @@ export function ChangePasswordPage() {
           Informe a senha atual e escolha uma nova senha com pelo menos 8 caracteres.
         </Alert>
 
-        {changePasswordMutation.isError && (
+        {requestError && (
           <Alert severity="error" aria-live="polite">
-            {getApiErrorMessage(changePasswordMutation.error)}
+            {requestError}
           </Alert>
         )}
 
@@ -135,8 +130,8 @@ export function ChangePasswordPage() {
           autoComplete="current-password"
           fullWidth
           size="small"
+          disabled={isSubmitting}
           slotProps={{
-            htmlInput: { maxLength: 100 },
             input: {
               endAdornment: passwordAdornment(showCurrentPassword, () =>
                 setShowCurrentPassword((visible) => !visible),
@@ -154,6 +149,7 @@ export function ChangePasswordPage() {
           autoComplete="new-password"
           fullWidth
           size="small"
+          disabled={isSubmitting}
           slotProps={{
             htmlInput: { maxLength: 100 },
             input: {
@@ -164,17 +160,37 @@ export function ChangePasswordPage() {
           }}
         />
 
+        <TextField
+          {...register('confirmNewPassword')}
+          label="Confirmar nova senha"
+          type={showConfirmation ? 'text' : 'password'}
+          error={Boolean(errors.confirmNewPassword)}
+          helperText={errors.confirmNewPassword?.message}
+          autoComplete="new-password"
+          fullWidth
+          size="small"
+          disabled={isSubmitting}
+          slotProps={{
+            htmlInput: { maxLength: 100 },
+            input: {
+              endAdornment: passwordAdornment(showConfirmation, () =>
+                setShowConfirmation((visible) => !visible),
+              ),
+            },
+          }}
+        />
+
         <Button
           type="submit"
           variant="contained"
           fullWidth
-          disabled={changePasswordMutation.isPending}
+          disabled={isSubmitting}
           sx={{ minHeight: 42 }}
         >
-          {changePasswordMutation.isPending ? (
+          {isSubmitting ? (
             <CircularProgress size={22} color="inherit" />
           ) : (
-            'Salvar nova senha'
+            firstAccess ? 'Salvar e continuar' : 'Salvar nova senha'
           )}
         </Button>
 
@@ -182,11 +198,17 @@ export function ChangePasswordPage() {
           type="button"
           color="inherit"
           onClick={() => {
-            endSession()
-            navigate('/login', { replace: true })
+            if (firstAccess) {
+              endSession()
+              navigate('/login', { replace: true })
+              return
+            }
+
+            navigate(session?.role === 'ADMIN' ? '/admin/reports' : '/home')
           }}
+          disabled={isSubmitting}
         >
-          Sair
+          {firstAccess ? 'Sair' : 'Cancelar'}
         </Button>
       </Stack>
     </Box>

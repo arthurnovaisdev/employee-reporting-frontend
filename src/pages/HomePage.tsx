@@ -1,5 +1,6 @@
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded'
 import DescriptionOutlined from '@mui/icons-material/DescriptionOutlined'
+import KeyOutlined from '@mui/icons-material/KeyOutlined'
 import LogoutOutlined from '@mui/icons-material/LogoutOutlined'
 import PersonOutlineRounded from '@mui/icons-material/PersonOutlineRounded'
 import SearchOutlined from '@mui/icons-material/SearchOutlined'
@@ -152,6 +153,24 @@ export function HomePage() {
                 {session?.name}
               </Typography>
             </Stack>
+
+            <Button
+              variant="text"
+              size="small"
+              startIcon={<KeyOutlined />}
+              onClick={() => navigate('/change-password')}
+              sx={{
+                minWidth: { xs: 40, sm: 'auto' },
+                px: { xs: 1, sm: 1.25 },
+                color: 'text.secondary',
+                '& .MuiButton-startIcon': { mr: { xs: 0, sm: 0.6 } },
+              }}
+              aria-label="Alterar senha"
+            >
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                Alterar senha
+              </Box>
+            </Button>
 
             <Button
               variant="text"

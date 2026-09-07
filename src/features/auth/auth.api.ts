@@ -14,6 +14,15 @@ export interface ChangePasswordRequestDTO {
   newPassword: string
 }
 
+export interface ForgotPasswordRequestDTO {
+  cpf: string
+}
+
+export interface ResetPasswordRequestDTO {
+  token: string
+  newPassword: string
+}
+
 const loginResponseSchema = z
   .object({
     token: z.string().min(1),
@@ -30,4 +39,12 @@ export async function login(request: LoginRequestDTO) {
 
 export async function changePassword(request: ChangePasswordRequestDTO) {
   await apiClient.patch<void>('/users/me/password', request)
+}
+
+export async function forgotPassword(request: ForgotPasswordRequestDTO) {
+  await apiClient.post<void>('/auth/forgot-password', request)
+}
+
+export async function resetPassword(request: ResetPasswordRequestDTO) {
+  await apiClient.post<void>('/auth/reset-password', request)
 }

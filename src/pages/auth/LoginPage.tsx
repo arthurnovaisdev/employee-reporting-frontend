@@ -13,7 +13,6 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useMutation } from '@tanstack/react-query'
 import { Controller, useForm } from 'react-hook-form'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
@@ -44,6 +43,7 @@ function formatCpf(value: string) {
 
 export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
+  const [requestError, setRequestError] = useState<string | null>(null)
   const navigate = useNavigate()
   const { startSession } = useAuth()
   const {
@@ -51,7 +51,7 @@ export function LoginPage() {
     register,
     handleSubmit,
     resetField,
-    formState: { errors },
+    formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -60,9 +60,12 @@ export function LoginPage() {
     },
   })
 
-  const loginMutation = useMutation({
-    mutationFn: login,
-    onSuccess: (session) => {
+  async function onSubmit(values: LoginFormValues) {
+    setRequestError(null)
+
+    try {
+      const session = await login(values)
+      resetField('password')
       startSession(session)
 
       if (!session.passwordChanged) {
@@ -71,17 +74,18 @@ export function LoginPage() {
       }
 
       navigate(session.role === 'ADMIN' ? '/admin/reports' : '/home', { replace: true })
-    },
-    onError: () => {
+    } catch (error) {
       resetField('password')
-    },
-  })
+      setRequestError(getApiErrorMessage(error))
+    }
+  }
 
   return (
     <Box
       component="form"
       noValidate
-      onSubmit={handleSubmit((values) => loginMutation.mutate(values))}
+      onSubmit={handleSubmit(onSubmit, () => setRequestError(null))}
+      aria-busy={isSubmitting}
       sx={{ width: '100%' }}
     >
       <Stack spacing={2.25}>
@@ -108,9 +112,9 @@ export function LoginPage() {
           </Typography>
         </Box>
 
-        {loginMutation.isError && (
+        {requestError && (
           <Alert severity="error" aria-live="polite">
-            {getApiErrorMessage(loginMutation.error)}
+            {requestError}
           </Alert>
         )}
 
@@ -129,6 +133,7 @@ export function LoginPage() {
               autoFocus
               fullWidth
               size="small"
+              disabled={isSubmitting}
               slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 14 } }}
             />
           )}
@@ -143,6 +148,7 @@ export function LoginPage() {
           autoComplete="current-password"
           fullWidth
           size="small"
+          disabled={isSubmitting}
           slotProps={{
             htmlInput: { maxLength: 100 },
             input: {
@@ -152,6 +158,7 @@ export function LoginPage() {
                     onClick={() => setShowPassword((visible) => !visible)}
                     edge="end"
                     aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                    disabled={isSubmitting}
                   >
                     {showPassword ? <VisibilityOffOutlined /> : <VisibilityOutlined />}
                   </IconButton>
@@ -165,10 +172,10 @@ export function LoginPage() {
           type="submit"
           variant="contained"
           fullWidth
-          disabled={loginMutation.isPending}
+          disabled={isSubmitting}
           sx={{ minHeight: 42 }}
         >
-          {loginMutation.isPending ? <CircularProgress size={22} color="inherit" /> : 'Entrar'}
+          {isSubmitting ? <CircularProgress size={22} color="inherit" /> : 'Entrar'}
         </Button>
 
         <RouterLink
