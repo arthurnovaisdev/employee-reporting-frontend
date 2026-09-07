@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { Box, CircularProgress, Typography } from '@mui/material'
+import { lazy, Suspense, useEffect } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { PublicLayout } from '../components/layout/PublicLayout'
@@ -8,19 +9,29 @@ import {
   ProtectedRoute,
   RoleRoute,
 } from '../features/auth/RouteGuards'
-import { AdminReportsPage } from '../pages/admin/AdminReportsPage'
-import { AdminUsersPage } from '../pages/admin/AdminUsersPage'
-import { ChangePasswordPage } from '../pages/auth/ChangePasswordPage'
-import { ForbiddenPage } from '../pages/auth/ForbiddenPage'
-import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage'
-import { LoginPage } from '../pages/auth/LoginPage'
-import { ResetPasswordPage } from '../pages/auth/ResetPasswordPage'
-import { HomePage } from '../pages/HomePage'
-import { NewReportPage } from '../pages/reports/NewReportPage'
-import { ProtocolConsultPage } from '../pages/reports/ProtocolConsultPage'
-import { ReportSuccessPage } from '../pages/reports/ReportSuccessPage'
 import { ReportFlowLayout, ReportFlowShell } from '../features/reports/ReportFlowLayout'
-import { AdminCategoriesPage } from '../pages/admin/AdminCategoriesPage'
+
+const AdminCategoriesPage = lazy(() => import('../pages/admin/AdminCategoriesPage').then((module) => ({ default: module.AdminCategoriesPage })))
+const AdminReportsPage = lazy(() => import('../pages/admin/AdminReportsPage').then((module) => ({ default: module.AdminReportsPage })))
+const AdminUsersPage = lazy(() => import('../pages/admin/AdminUsersPage').then((module) => ({ default: module.AdminUsersPage })))
+const ChangePasswordPage = lazy(() => import('../pages/auth/ChangePasswordPage').then((module) => ({ default: module.ChangePasswordPage })))
+const ForbiddenPage = lazy(() => import('../pages/auth/ForbiddenPage').then((module) => ({ default: module.ForbiddenPage })))
+const ForgotPasswordPage = lazy(() => import('../pages/auth/ForgotPasswordPage').then((module) => ({ default: module.ForgotPasswordPage })))
+const LoginPage = lazy(() => import('../pages/auth/LoginPage').then((module) => ({ default: module.LoginPage })))
+const ResetPasswordPage = lazy(() => import('../pages/auth/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })))
+const HomePage = lazy(() => import('../pages/HomePage').then((module) => ({ default: module.HomePage })))
+const NewReportPage = lazy(() => import('../pages/reports/NewReportPage').then((module) => ({ default: module.NewReportPage })))
+const ProtocolConsultPage = lazy(() => import('../pages/reports/ProtocolConsultPage').then((module) => ({ default: module.ProtocolConsultPage })))
+const ReportSuccessPage = lazy(() => import('../pages/reports/ReportSuccessPage').then((module) => ({ default: module.ReportSuccessPage })))
+
+function RouteLoading() {
+  return (
+    <Box role="status" aria-live="polite" sx={{ minHeight: 240, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 1.5 }}>
+      <CircularProgress size={30} aria-hidden="true" />
+      <Typography color="text.secondary">Carregando página…</Typography>
+    </Box>
+  )
+}
 
 export function AppRouter() {
   const navigate = useNavigate()
@@ -49,7 +60,8 @@ export function AppRouter() {
   }, [navigate])
 
   return (
-    <Routes>
+    <Suspense fallback={<RouteLoading />}>
+      <Routes>
       <Route element={<PublicLayout />}>
         <Route element={<GuestRoute />}>
           <Route path="/login" element={<LoginPage />} />
@@ -103,7 +115,8 @@ export function AppRouter() {
       </Route>
 
       <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </Suspense>
   )
 }
