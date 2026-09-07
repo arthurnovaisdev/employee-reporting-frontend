@@ -9,6 +9,13 @@ const { reportSchema, toReportRequest } = await server.ssrLoadModule('/src/featu
 const { validateAttachments, maxAttachmentBytes } = await server.ssrLoadModule('/src/features/reports/attachments.ts')
 const { submitReport } = await server.ssrLoadModule('/src/features/reports/reports.api.ts')
 const { getCategories, readCategoryPage } = await server.ssrLoadModule('/src/features/reports/categories.api.ts')
+const {
+  consultReport,
+  formatReportCreatedAt,
+  getProtocolConsultErrorMessage,
+  protocolConsultSchema,
+  reportStatusLabels,
+} = await server.ssrLoadModule('/src/features/reports/protocolConsult.ts')
 const { apiClient } = await server.ssrLoadModule('/src/lib/http/apiClient.ts')
 const { setAccessToken } = await server.ssrLoadModule('/src/features/auth/tokenStore.ts')
 globalThis.window = new EventTarget()
@@ -132,4 +139,57 @@ test('paginação é validada em runtime e aceita lista vazia sem inventar categ
   assert.deepEqual(readCategoryPage({ content: [], page: { number: 0, totalPages: 0 } }).categories, [])
   assert.throws(() => readCategoryPage({ unexpected: [] }))
   assert.throws(() => readCategoryPage({ content: [{ id: 'inválido' }], number: 0, totalPages: 1 }))
+})
+
+test('consulta valida e normaliza somente protocolo e código documentados', () => {
+  assert.deepEqual(
+    protocolConsultSchema.parse({ protocol: ' den-2026-1234567 ', code: ' abc234 ' }),
+    { protocol: 'DEN-2026-1234567', code: 'ABC234' },
+  )
+  assert.equal(protocolConsultSchema.safeParse({ protocol: '1234567', code: 'ABC234' }).success, false)
+  assert.equal(protocolConsultSchema.safeParse({ protocol: 'DEN-2026-1234567', code: 'ABC210' }).success, false)
+})
+
+test('consulta usa GET /reports/consult com query params protocol e code e valida o DTO', async () => {
+  const report = {
+    protocol: 'DEN-2026-1234567',
+    category: 'Conduta interna',
+    description: 'Relato de teste.',
+    status: 'IN_ANALYSIS',
+    createdAt: '2026-09-04T12:30:00',
+  }
+  apiClient.defaults.adapter = async (config) => {
+    assert.equal(config.method, 'get')
+    assert.equal(config.url, '/reports/consult')
+    assert.deepEqual(config.params, { protocol: report.protocol, code: 'ABC234' })
+    return response(config, { ...report, administrativeNote: 'não deve ser consumida' }, 200)
+  }
+
+  assert.deepEqual(await consultReport({ protocol: report.protocol, code: 'ABC234' }), report)
+  assert.equal(reportStatusLabels.IN_ANALYSIS, 'Em análise')
+  assert.equal(formatReportCreatedAt(report.createdAt), '04/09/2026 às 12:30')
+})
+
+test('consulta não diferencia protocolo inexistente de código incorreto e trata falhas de serviço', () => {
+  const config = { url: '/reports/consult', method: 'get' }
+  const notFound = new axios.AxiosError(
+    'Falha simulada',
+    'ERR_BAD_RESPONSE',
+    config,
+    undefined,
+    response(config, { erro: 'Protocolo não encontrado.' }, 404),
+  )
+  const invalidCode = new axios.AxiosError(
+    'Falha simulada',
+    'ERR_BAD_RESPONSE',
+    config,
+    undefined,
+    response(config, { erro: 'Protocolo ou código de acesso inválido.' }, 404),
+  )
+  const unavailable = httpError(config, 500)
+  const network = new axios.AxiosError('Network Error', 'ERR_NETWORK', config)
+
+  assert.equal(getProtocolConsultErrorMessage(notFound), getProtocolConsultErrorMessage(invalidCode))
+  assert.match(getProtocolConsultErrorMessage(unavailable), /temporariamente indisponível/)
+  assert.match(getProtocolConsultErrorMessage(network), /conectar ao serviço/)
 })
