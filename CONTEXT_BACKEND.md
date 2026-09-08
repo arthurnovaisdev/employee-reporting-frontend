@@ -117,14 +117,16 @@ Cadastro sempre cria `EMPLOYEE`; não recebe `role`, `active` ou `passwordChange
 
 A listagem não filtra `active`; retorna também categorias inativas. Não existem consulta individual, edição, ativação, desativação ou exclusão de categoria pela API.
 
-### ReportController — 5 endpoints
+### ReportController — 7 endpoints
 
 | Método e rota | Finalidade / acesso | Path / query | Body | Sucesso | Principais erros específicos |
 | --- | --- | --- | --- | --- | --- |
 | POST `/api/reports` | Criar denúncia; EMPLOYEE | Nenhum / nenhum | `ReportRequestDTO` | 201, `ProtocolResponseDTO` | 400 validação; 404 categoria não encontrada; 409 restrição de banco |
 | POST `/api/reports/{protocol}/attachments` | Anexar arquivos; EMPLOYEE | `protocol`: String / `trackingCode`: String obrigatório, enviar como campo textual multipart | Multipart com `trackingCode` e `files`, múltiplos arquivos | 201, sem corpo | 400 código incorreto; 404 denúncia não encontrada; arquivos inválidos lançam exceções sem handler específico, podendo resultar em 500; limites multipart dependem do tratamento em runtime |
 | GET `/api/reports/consult` | Consultar por protocolo e código; EMPLOYEE | Nenhum / `protocol`: String obrigatório, `code`: String obrigatório | Nenhum | 200, `ReportResponseDTO` | 404 protocolo não encontrado ou código incorreto; ausência de parâmetro sem handler específico, ver seção 8 |
-| GET `/api/reports/admin` | Listar todas as denúncias; ADMIN | Nenhum / `page`, `size`, `sort` | Nenhum | 200, `Page<ReportResponseDTO>` | 500 falhas de consulta/ordenação |
+| GET `/api/reports/admin` | Listar todas as denúncias; ADMIN | Nenhum / `page`, `size` | Nenhum | 200, `Page<ReportResponseDTO>` | 500 falhas de consulta/paginação |
+| GET `/api/reports/admin/{protocol}` | Obter o detalhe administrativo de uma denúncia; ADMIN | `protocol`: String / nenhum | Nenhum | 200, `ReportAdminResponseDTO` | 404 denúncia não encontrada |
+| GET `/api/reports/admin/{protocol}/attachments/{attachmentId}` | Abrir/baixar um anexo da denúncia; ADMIN | `protocol`: String, `attachmentId`: UUID / nenhum | Nenhum | 200, corpo binário (`Resource`), `Content-Type` original e `Content-Disposition: inline` com o nome original | 404 anexo inexistente ou não pertencente ao protocolo; UUID malformado: erro de conversão; falha de leitura do arquivo pode resultar em 500 |
 | PATCH `/api/reports/admin/{protocol}/status` | Alterar status; ADMIN | `protocol`: String / nenhum | `ReportStatusUpdateRequestDTO` | 200, `ReportResponseDTO` | 400 validação; 404 denúncia não encontrada; enum inválido é erro de conversão, ver seção 8 |
 
 Exemplo de consulta: `http://localhost:8080/api/reports/consult?protocol=DEN-2026-1234567&code=ABC234`. Os valores são fictícios. Use codificação de query parameters; não registre a URL com código em logs ou analytics.
@@ -137,8 +139,9 @@ Regras confirmadas em `ReportService`:
 - Para consultar, o campo de query se chama **`code`**, não `trackingCode`. A comparação usa BCrypt e não normaliza espaços ou caixa.
 - Estado inicial: `RECEIVED`. Não há restrições de transição entre os valores do enum. Atualizar para o mesmo status retorna a denúncia sem gravar histórico/auditoria e sem salvar a nova `note`.
 - Mudança efetiva cria `StatusHistory` com o novo status e `observation` recebida de `note`, além de `AuditLog` com o administrador e a ação `UPDATE_STATUS: <antigo> -> <novo>`.
-- A consulta, a listagem administrativa e a alteração de status retornam o mesmo `ReportResponseDTO`. Não retornam ID interno, `categoryId`, `incidentDate`, `incidentLocation`, `updatedAt`, tracking code, anexos, histórico ou observações.
-- Não existem atualização de descrição/categoria/data/local, exclusão de denúncia, comentários, consulta administrativa individual sem código, listagem “minhas denúncias” ou filtros de busca/status além da paginação.
+- A consulta do funcionário, a listagem administrativa e a alteração de status retornam `ReportResponseDTO`. O novo detalhe administrativo retorna `ReportAdminResponseDTO`, que acrescenta `incidentDate`, `incidentLocation` e `attachments` aos dados da denúncia.
+- O detalhe administrativo não retorna ID interno da denúncia, `categoryId`, `updatedAt`, tracking code, histórico ou observações. Cada item de `attachments` expõe somente os metadados de `AttachmentResponseDTO`.
+- Não existem atualização de descrição/categoria/data/local, exclusão de denúncia, comentários, listagem “minhas denúncias” ou filtros de busca/status além da paginação.
 
 ### UserController — 6 endpoints
 
@@ -343,6 +346,58 @@ Exemplo completo na seção 3. Não retorna `id`, `cpf`, `active`, `contactEmail
 }
 ```
 
+#### AttachmentResponseDTO
+
+Metadado de anexo exposto ao frontend dentro de `ReportAdminResponseDTO.attachments`:
+
+| Campo | Tipo Java / JSON | Presença / formato |
+| --- | --- | --- |
+| `id` | UUID / string | Identificador usado no endpoint administrativo de leitura do arquivo |
+| `originalFileName` | String / string | Nome original informado no upload |
+| `contentType` | String / string | MIME type registrado no upload |
+| `fileSize` | Long / number ou null | Tamanho em bytes; a coluna da entidade aceita null |
+| `createdAt` | LocalDateTime / data-hora | Data e hora de persistência, sem fuso |
+
+O DTO não expõe `storedFileName`, caminho físico, URL pública nem referência direta ao arquivo no servidor. Esses dados não devem ser inferidos ou montados pelo frontend.
+
+#### ReportAdminResponseDTO
+
+Retornado exclusivamente pelo detalhe `GET /api/reports/admin/{protocol}`:
+
+| Campo | Tipo Java / JSON | Presença / formato |
+| --- | --- | --- |
+| `protocol` | String / string | Protocolo da denúncia |
+| `category` | String / string | Nome da categoria, não objeto/UUID |
+| `description` | String / string | Texto da denúncia |
+| `status` | ReportStatus / string | Valor exato do enum |
+| `incidentDate` | LocalDate / data ou null | Data informada para o ocorrido |
+| `incidentLocation` | String / string ou null | Local informado para o ocorrido |
+| `createdAt` | LocalDateTime / data-hora | Data e hora de criação, sem fuso |
+| `attachments` | List<AttachmentResponseDTO> / array | Metadados dos anexos associados; array vazio quando não houver registros |
+
+```json
+{
+  "protocol": "DEN-2026-1234567",
+  "category": "Conduta interna",
+  "description": "Descrição fictícia do ocorrido.",
+  "status": "RECEIVED",
+  "incidentDate": "2026-09-03",
+  "incidentLocation": "Unidade Salvador",
+  "createdAt": "2026-09-04T12:30:00",
+  "attachments": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440002",
+      "originalFileName": "comprovante.pdf",
+      "contentType": "application/pdf",
+      "fileSize": 245760,
+      "createdAt": "2026-09-04T12:35:00"
+    }
+  ]
+}
+```
+
+`AttachmentDownloadDTO` é usado apenas internamente entre service e controller para transportar o `Resource`, o nome original e o content type. O endpoint de arquivo não serializa esse DTO como JSON: seu corpo HTTP é o binário do anexo.
+
 #### UserResponseDTO
 
 | Campo | Tipo Java / JSON | Presença / formato |
@@ -401,25 +456,25 @@ CLOSED
 ARCHIVED
 ```
 
-Usado em `ReportStatusUpdateRequestDTO.newStatus` e `ReportResponseDTO.status`. Inicial: `RECEIVED`. O código não define descrições formais, etapas obrigatórias nem regras de transição; rótulos em português são apresentação do frontend e não devem substituir os valores enviados. O valor real é `UNDER_INVESTIGATION`, com essa grafia.
+Usado em `ReportStatusUpdateRequestDTO.newStatus`, `ReportResponseDTO.status` e `ReportAdminResponseDTO.status`. Inicial: `RECEIVED`. O código não define descrições formais, etapas obrigatórias nem regras de transição; rótulos em português são apresentação do frontend e não devem substituir os valores enviados. O valor real é `UNDER_INVESTIGATION`, com essa grafia.
 
 ## 7. Paginação
 
 | Endpoint | Tipo retornado | Defaults explícitos no controller |
 | --- | --- | --- |
 | GET `/api/categories` | `Page<CategoryResponseDTO>` | `Pageable` sem `@PageableDefault`; page/size/sort não fixados pelo projeto |
-| GET `/api/reports/admin` | `Page<ReportResponseDTO>` | `page=0`, `size=10`, `sort=createdAt`; direção não explicitada |
+| GET `/api/reports/admin` | `Page<ReportResponseDTO>` | `page=0`, `size=10`; ordenação fixa por `createdAt` DESC |
 | GET `/api/users` | `Page<UserResponseDTO>` | `size=20`, `sort=name`; page e direção não explicitadas |
 
-Convenção do resolver Spring Data: página inicial 0, parâmetros `page`, `size`, `sort`; `sort=campo,asc` ou `sort=campo,desc`, podendo repetir `sort`. Sem override do framework, os defaults usuais são page 0, size 20 e sem ordenação para `Pageable` simples, e direção ASC para `@PageableDefault`. Estes defaults de framework não estão definidos integralmente em código local; confirmar em runtime ou enviar parâmetros explicitamente. Não há configuração local de limite máximo de página.
+Nos endpoints que recebem `Pageable`, a convenção do resolver Spring Data usa página inicial 0 e parâmetros `page`, `size`, `sort`; `sort=campo,asc` ou `sort=campo,desc`, podendo repetir `sort`. Sem override do framework, os defaults usuais são page 0, size 20 e sem ordenação para `Pageable` simples, e direção ASC para `@PageableDefault`. Estes defaults de framework não estão definidos integralmente em código local; confirmar em runtime ou enviar parâmetros explicitamente. Não há configuração local de limite máximo de página. A listagem de denúncias é a exceção: o controller recebe apenas `page` e `size` e monta diretamente um `PageRequest` com `createdAt` DESC; não enviar `sort` esperando alterar essa ordenação.
 
 Exemplos de consumo explícito:
 
 - `/api/categories?page=0&size=20&sort=name,asc`
-- `/api/reports/admin?page=0&size=10&sort=createdAt,desc`
+- `/api/reports/admin?page=0&size=10`
 - `/api/users?page=0&size=20&sort=name,asc`
 
-Não há whitelist de sort no código. Use propriedades conhecidas da entidade consultada; `category` da response de denúncia é nome projetado, não um campo escalar equivalente na entidade. Não suponha que todo campo visual possa ser usado para ordenar.
+Não há whitelist de sort nos endpoints que aceitam esse parâmetro. Use propriedades conhecidas da entidade consultada e não suponha que todo campo visual possa ser usado para ordenar.
 
 **A estrutura exata de serialização de Page<T> deve ser confirmada em runtime.** O projeto retorna `Page<T>` diretamente, sem envelope próprio. Não há exemplo fictício de envelope neste documento. O frontend precisará identificar no retorno real o conteúdo, página, tamanho, total de elementos/páginas e indicadores de navegação, sem tratar nomes presumidos como contrato confirmado. Os itens são exatamente os DTOs indicados.
 
@@ -480,7 +535,8 @@ Mensagens de negócio relevantes:
 - Consulta com protocolo inexistente: `Protocolo não encontrado.` (404).
 - Consulta com código incorreto: `Protocolo ou código de acesso inválido.` (404).
 - Upload com código incorreto: `Código de rastreio inválido para este protocolo.` (400).
-- Upload/status com protocolo inexistente: `Denúncia não encontrada com o protocolo: <protocol>` (404).
+- Upload, detalhe administrativo ou alteração de status com protocolo inexistente: `Denúncia não encontrada com o protocolo: <protocol>` (404).
+- Download com `attachmentId` inexistente ou que não pertença ao `protocol` informado: `Anexo não encontrado.` (404).
 
 Não há handlers específicos para JSON malformado, enum/UUID/data inválidos, parâmetros obrigatórios ausentes, `IllegalArgumentException`, `DisabledException` ou tamanho multipart excedido. Exceções que alcançam o advice genérico podem produzir 500, mesmo sendo problemas de entrada. Falhas anteriores ao MVC, no container ou no processamento multipart podem ter tratamento diferente; confirmar status e body em runtime, sem assumir 400/413 padronizados.
 
@@ -501,21 +557,42 @@ Não há handlers específicos para JSON malformado, enum/UUID/data inválidos, 
 
 Para desenvolvimento local no navegador, usar origem `http://localhost:5173`. `http://127.0.0.1:5173`, outras portas ou HTTPS localhost não estão na lista. A liberação de PUT/DELETE por CORS não cria endpoints desses métodos. JWT é enviado no header; o backend não implementa autenticação por cookie, e `allowCredentials=true` não obriga `withCredentials` para o Bearer.
 
-## 10. Upload de arquivos
+## 10. Anexos: upload do funcionário e leitura administrativa
+
+### Upload do EMPLOYEE
 
 - Endpoint: `POST /api/reports/{protocol}/attachments`, exclusivamente com JWT de `EMPLOYEE`. Uma conta `ADMIN` não possui autorização para esse endpoint.
-- Body: `multipart/form-data`; campo textual obrigatório **`trackingCode`** (String, código retornado na criação) e campo **`files`**, mapeado para `List<MultipartFile>`. Para vários arquivos, repetir `files` no `FormData`. Ambos são `@RequestParam`; enviar o código no FormData evita colocá-lo na URL. Não há `@NotBlank` no parâmetro, mas o service compara seu valor com o hash BCrypt.
+- Path: **`protocol`** identifica a denúncia. Body: `multipart/form-data`; campo textual obrigatório **`trackingCode`** (String, código retornado na criação) e campo **`files`**, mapeado para `List<MultipartFile>`. Para vários arquivos, repetir `files` no `FormData`. Ambos são `@RequestParam`; enviar o código no FormData evita colocá-lo na URL. Não há `@NotBlank` no parâmetro, mas o service compara seu valor com o hash BCrypt.
 - MIME types aceitos: `image/jpeg`, `image/png`, `application/pdf`. A checagem usa o Content-Type informado no arquivo; não há inspeção de conteúdo implementada.
-- Limite configurado: `spring.servlet.multipart.max-file-size=10MB` por arquivo e `spring.servlet.multipart.max-request-size=10MB` para a requisição inteira. Vários arquivos compartilham o limite total, incluindo o envelope multipart.
+- Configuração de armazenamento: **`file.upload-dir=uploads/attachments`**. O valor é relativo ao diretório de execução e normalizado para caminho absoluto; o construtor também declara `uploads/attachments` como fallback.
+- Limites configurados: **`spring.servlet.multipart.max-file-size=10MB`** por arquivo e **`spring.servlet.multipart.max-request-size=10MB`** para a requisição inteira. Vários arquivos compartilham o limite total, incluindo o envelope multipart.
 - Não há limite explícito de quantidade no service. Lista vazia e arquivo vazio são rejeitados.
 - Sucesso: 201 sem corpo, sem IDs, nomes ou URLs retornados.
 - O upload exige protocolo e `trackingCode` válido, além de autenticação. Código incorreto retorna 400 com `erro`: `Código de rastreio inválido para este protocolo.`. Não há checagem de autor nem restrição por status da denúncia. Na consulta o parâmetro se chama `code`; no upload, `trackingCode`.
-- Armazenamento no servidor: `uploads/attachments`, relativo ao diretório de execução, normalizado para caminho absoluto. Nome interno gerado com UUID e extensão; não é uma URL pública.
-- **Existem somente endpoints de upload: não existem endpoints de download, listagem, visualização ou exclusão de anexos.** Nenhuma response de denúncia contém anexos.
+- O nome interno é gerado com UUID e extensão. Ele e o caminho físico são detalhes privados do servidor, não URLs públicas e não aparecem no `AttachmentResponseDTO`.
 
 Rejeições internas de arquivo lançam `IllegalArgumentException`: `Nenhum arquivo foi enviado.`, `Não é possível enviar um arquivo vazio.` e `Tipo de arquivo não permitido. Apenas PDF, JPEG e PNG são aceitos.`. Como não há handler específico, essas mensagens não são garantidas no body HTTP; o advice genérico retorna 500 com mensagem genérica. Falha de escrita também gera exceção genérica. Validar MIME e tamanho no frontend melhora a experiência, mas não substitui a validação do servidor.
 
 Se um arquivo de um lote falhar, não há compensação dos arquivos já escritos em disco. Não assumir sucesso parcial identificável nem reenviar automaticamente todo o lote: a API não retorna quais arquivos foram gravados.
+
+### Detalhe e download do ADMIN
+
+- Para obter a denúncia e a lista de anexos, enviar `GET /api/reports/admin/{protocol}` com JWT de `ADMIN` no header `Authorization: Bearer <TOKEN>`. A resposta JSON é `ReportAdminResponseDTO`; `attachments` contém itens `AttachmentResponseDTO`.
+- Para ler um arquivo, enviar `GET /api/reports/admin/{protocol}/attachments/{attachmentId}`, também com Bearer token de `ADMIN`. O `attachmentId` vem de `attachments` no detalhe administrativo.
+- O retorno do download é o corpo binário do arquivo como `Resource`, não JSON. O controller aplica o `Content-Type` original salvo no upload e `Content-Disposition: inline` com `filename` baseado em `originalFileName`, codificado em UTF-8.
+- A consulta `findByIdAndReportProtocol(attachmentId, protocol)` valida conjuntamente o ID e o protocolo. Se o anexo não existir ou pertencer a outra denúncia, o backend responde 404 com `Anexo não encontrado.`.
+- O arquivo físico é carregado somente pelo backend a partir do nome interno persistido; `FileStorageService` normaliza o caminho e rejeita resolução fora de `file.upload-dir`.
+- Não há endpoint de exclusão ou edição de anexos. A listagem disponível é apenas o array `attachments` do detalhe administrativo; não existe endpoint separado para listar anexos.
+
+Exemplo esquemático da resposta de arquivo (o valor exato de `Content-Disposition` é formatado pelo Spring conforme o nome):
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/pdf
+Content-Disposition: inline; filename=<nome-original-em-UTF-8>
+
+<conteúdo binário do arquivo>
+```
 
 ## 11. Fluxos principais
 
@@ -545,11 +622,15 @@ Com uma conta `EMPLOYEE` autenticada, solicitar protocolo e código e enviar GET
 
 ### Upload de anexos
 
-Com a mesma conta `EMPLOYEE` usada no fluxo de funcionário, após criar a denúncia, montar `FormData` com o campo textual `trackingCode` e uma ou mais partes `files`, e enviar ao protocolo retornado. Uma conta `ADMIN` recebe 403 nesse endpoint. Deixar navegador/cliente gerar Content-Type com boundary; não enviar JSON. Tratar 201 sem parsing de body. Não construir links de download ou galeria a partir do protocolo, pois não há contrato para isso.
+Com a mesma conta `EMPLOYEE` usada no fluxo de funcionário, após criar a denúncia, montar `FormData` com o campo textual `trackingCode` e uma ou mais partes `files`, e enviar a POST `/reports/{protocol}/attachments`, usando o protocolo no path. Uma conta `ADMIN` recebe 403 nesse endpoint. Deixar navegador/cliente gerar Content-Type com boundary; não enviar JSON. Tratar 201 sem parsing de body.
 
 ### Fluxo administrativo
 
-`ADMIN` acessa denúncias exclusivamente pelas rotas administrativas: lista em `/reports/admin` e altera status em `/reports/admin/{protocol}/status`, com observação opcional. A resposta atualiza a denúncia, mas não fornece histórico ou note. A conta `ADMIN` não pode criar denúncias, enviar anexos nem consultar por protocolo + código. Caso uma pessoa do RH precise usar essas funções como funcionária, deve autenticar-se com uma conta `EMPLOYEE` separada.
+`ADMIN` acessa denúncias exclusivamente pelas rotas administrativas. Listar em GET `/reports/admin`; ao abrir uma denúncia, buscar o detalhe em GET `/reports/admin/{protocol}` e usar diretamente o array `attachments` retornado. Para abrir um item, consumir GET `/reports/admin/{protocol}/attachments/{attachmentId}` como **blob autenticado**, enviando o Bearer token, e criar a visualização/download no cliente a partir dessa resposta binária.
+
+Não construir caminho ou URL de arquivo manualmente, não usar nem tentar inferir `storedFileName` e não apontar o navegador diretamente para `file.upload-dir`. O frontend deve combinar somente o `protocol` atual e o `id` recebido em `attachments` no endpoint administrativo documentado. Não inventar ações de exclusão ou edição de anexos, pois elas não existem no backend.
+
+A alteração de status continua em `/reports/admin/{protocol}/status`, com observação opcional. A resposta atualiza a denúncia, mas não fornece histórico ou note. A conta `ADMIN` não pode criar denúncias, enviar anexos nem consultar por protocolo + código. Caso uma pessoa do RH precise usar essas funções como funcionária, deve autenticar-se com uma conta `EMPLOYEE` separada.
 
 `ADMIN` também cadastra `EMPLOYEE` em `/auth/register`, lista/consulta usuários e ativa/desativa contas. Tanto `EMPLOYEE` quanto `ADMIN` podem listar categorias com GET `/categories`; somente `ADMIN` pode criá-las com POST `/categories`.
 
@@ -557,7 +638,9 @@ Com a mesma conta `EMPLOYEE` usada no fluxo de funcionário, após criar a denú
 
 - Exibir e permitir acesso às ações de criar denúncia, enviar anexos e consultar por protocolo + código somente para sessões com role `EMPLOYEE`.
 - Não apresentar essas ações como disponíveis a uma sessão `ADMIN` e não usar a conta administrativa como alternativa para chamar os endpoints de funcionário.
-- Direcionar a experiência de denúncias da sessão `ADMIN` exclusivamente às rotas e telas administrativas.
+- Direcionar a experiência de denúncias da sessão `ADMIN` exclusivamente às rotas e telas administrativas; ao abrir o detalhe, chamar GET `/reports/admin/{protocol}` e renderizar seus oito campos, incluindo `attachments`.
+- Abrir anexos administrativos por GET `/reports/admin/{protocol}/attachments/{attachmentId}` como blob autenticado. Usar o `id` e `originalFileName` fornecidos por `AttachmentResponseDTO`; nunca `storedFileName` ou um caminho montado manualmente.
+- Não exibir controles de edição ou exclusão de anexos, pois não há endpoints correspondentes.
 - Se uma pessoa possuir responsabilidades de RH e também precisar denunciar como funcionária, tratar as contas `ADMIN` e `EMPLOYEE` como sessões separadas; não tentar alternar a role no frontend.
 - Permitir a listagem de categorias para `EMPLOYEE` e `ADMIN`, mas restringir a criação de categorias a `ADMIN`.
 - Manter guards visuais no frontend para a experiência correta, sem tratá-los como substitutos da autorização aplicada pelo backend.
@@ -569,10 +652,10 @@ Com a mesma conta `EMPLOYEE` usada no fluxo de funcionário, após criar a denú
 - Criação, acompanhamento e upload de denúncias exigem login apesar do contexto de denúncias anônimas.
 - Criação de categoria exige `ADMIN`; listagem aceita `EMPLOYEE` e `ADMIN` e inclui categorias inativas, que também são aceitas na criação de denúncia.
 - Criação de denúncia, consulta por protocolo + código e upload de anexos exigem `EMPLOYEE`. Uma conta `ADMIN` recebe 403 nessas rotas e acessa denúncias somente por `/reports/admin/**`.
-- `ReportAdminResponseDTO` existe, mas não é usado pelos controllers ou serviços de resposta. Declara `protocol`, `category`, `description`, `status`, `incidentDate`, `incidentLocation`, `createdAt`; não consumir esse formato. A API administrativa retorna `ReportResponseDTO`.
-- `incidentDate` e `incidentLocation` são aceitos e persistidos, mas não retornados por nenhum endpoint atual.
+- `ReportAdminResponseDTO` é retornado por GET `/reports/admin/{protocol}` e contém `protocol`, `category`, `description`, `status`, `incidentDate`, `incidentLocation`, `createdAt` e `attachments`. A listagem administrativa e a alteração de status continuam retornando `ReportResponseDTO`.
+- `incidentDate` e `incidentLocation` são aceitos, persistidos e retornados no detalhe administrativo; continuam ausentes de `ReportResponseDTO`.
 - `StatusHistory` e `AuditLog` são gravados na alteração efetiva de status, mas não têm endpoints REST de consulta. `note` não pode ser recuperada via API. Não há comentários.
-- Anexos só possuem upload, exigindo protocolo, trackingCode e autenticação. Não há download/listagem/exclusão e o retorno não permite identificar arquivos.
+- O upload de anexos permanece exclusivo de `EMPLOYEE` e exige protocolo, trackingCode e autenticação. O detalhe e o download são exclusivos de `ADMIN`; não há edição nem exclusão de anexos.
 - `passwordChanged=false` não restringe a API. Desativação não bloqueia o caminho de autenticação por JWT já emitido. Troca/reset não revogam JWTs.
 - Erros de entrada não cobertos por handlers específicos podem virar 500. Não assumir que todos os erros de cliente serão 400.
 - Recuperação depende de e-mail previamente cadastrado e usa link fixo em localhost. Não há endpoint de edição desse e-mail.
@@ -589,9 +672,9 @@ Nunca logar JWT, senha, token de recuperação ou tracking code. A estratégia d
 
 ### Referências do código e revisão
 
-Contrato baseado nos quatro arquivos de `controller`, oito records de `dto/request`, responses efetivamente usados em `dto/response`, `enums/Role.java`, `enums/ReportStatus.java`, `config/SecurityConfig.java`, `config/CorsConfig.java`, `config/OpenApiConfig.java`, classes de `security`, `exception/GlobalExceptionHandler.java` e configurações de `src/main/resources/application.properties`. Services e modelos foram usados para confirmar somente regras citadas de criação, consulta, status, senha e arquivos.
+Contrato baseado nos quatro arquivos de `controller`, oito records de `dto/request`, responses efetivamente usados em `dto/response`, `enums/Role.java`, `enums/ReportStatus.java`, `config/SecurityConfig.java`, `config/CorsConfig.java`, `config/OpenApiConfig.java`, classes de `security`, `exception/GlobalExceptionHandler.java` e configurações de `src/main/resources/application.properties`. Para anexos administrativos, a revisão também confirmou diretamente `ReportController`, `ReportService`, `FileStorageService`, `AttachmentRepository`, `Attachment`, `ReportAdminResponseDTO`, `AttachmentResponseDTO` e `AttachmentDownloadDTO`.
 
-A revisão confrontou os 17 mappings, nomes dos DTOs/campos, enums, regras Security, validações e exemplos JSON com o código. Não houve execução de chamadas HTTP; os pontos de runtime acima permanecem pendentes.
+A revisão confrontou os 19 mappings, nomes dos DTOs/campos, enums, regras Security, validações e exemplos JSON com o código. Não houve execução de chamadas HTTP; os pontos de runtime acima permanecem pendentes.
 
 ## 13. Tabela final de endpoints
 
@@ -609,6 +692,8 @@ Todos os endpoints de negócio encontrados nos controllers estão abaixo. O host
 | POST | `/api/reports/{protocol}/attachments` | Sim | EMPLOYEE | Enviar anexos |
 | GET | `/api/reports/consult` | Sim | EMPLOYEE | Consultar com protocol e code |
 | GET | `/api/reports/admin` | Sim | ADMIN | Listar denúncias paginadas |
+| GET | `/api/reports/admin/{protocol}` | Sim | ADMIN | Obter detalhe da denúncia com attachments |
+| GET | `/api/reports/admin/{protocol}/attachments/{attachmentId}` | Sim | ADMIN | Retornar o binário de um anexo pertencente à denúncia |
 | PATCH | `/api/reports/admin/{protocol}/status` | Sim | ADMIN | Alterar status |
 | GET | `/api/users/me` | Sim | Qualquer autenticado | Consultar próprio perfil |
 | GET | `/api/users` | Sim | ADMIN | Listar usuários paginados |

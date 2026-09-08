@@ -34,6 +34,49 @@ export function readAdminReportPage(data: unknown) {
 
 export type AdminReportPage = ReturnType<typeof readAdminReportPage>
 
+export const attachmentResponseSchema = z.object({
+  id: z.uuid(),
+  originalFileName: z.string(),
+  contentType: z.string(),
+  fileSize: z.number().nonnegative().nullish(),
+  createdAt: z.string().nullish(),
+})
+
+export const reportAdminResponseSchema = reportResponseSchema.extend({
+  incidentDate: z.string().nullish(),
+  incidentLocation: z.string().nullish(),
+  attachments: z.array(attachmentResponseSchema),
+})
+
+export type AttachmentResponseDTO = z.infer<typeof attachmentResponseSchema>
+export type ReportAdminResponseDTO = z.infer<typeof reportAdminResponseSchema>
+
+export async function getAdminReportDetail(protocol: string, signal?: AbortSignal) {
+  const { data } = await apiClient.get<unknown>(`/reports/admin/${encodeURIComponent(protocol)}`, { signal })
+  const report = reportAdminResponseSchema.parse(data)
+  if (report.protocol !== protocol) throw new Error('Resposta inesperada do detalhe da denúncia.')
+  return report
+}
+
+export async function getAdminAttachment(protocol: string, attachmentId: string, signal?: AbortSignal) {
+  const { data } = await apiClient.get<Blob>(
+    `/reports/admin/${encodeURIComponent(protocol)}/attachments/${encodeURIComponent(attachmentId)}`,
+    { responseType: 'blob', headers: { Accept: 'application/pdf, image/jpeg, image/png, application/json' }, signal },
+  )
+  return data
+}
+
+export function getAdminAttachmentError(error: unknown) {
+  return getApiErrorMessage(error, {
+    defaultMessage: 'Não foi possível abrir o anexo. Tente novamente.',
+    statusMessages: {
+      401: 'Sua sessão expirou. Faça login novamente.',
+      403: 'Você não tem permissão para visualizar este anexo.',
+      404: 'Anexo não encontrado nesta denúncia. Feche e abra o detalhe para atualizar os anexos.',
+    },
+  })
+}
+
 export async function getAdminReports(page: number, signal?: AbortSignal) {
   const { data } = await apiClient.get<unknown>('/reports/admin', {
     params: { page, size: 10 }, signal,

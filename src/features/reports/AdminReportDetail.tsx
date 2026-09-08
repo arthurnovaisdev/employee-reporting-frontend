@@ -4,12 +4,50 @@ import {
   DialogContent, DialogTitle, Divider, MenuItem, Stack, TextField, Typography,
 } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Controller, useForm } from 'react-hook-form'
-import { getAdminReportError, reportStatusUpdateSchema, updateReportStatus, type ReportStatusUpdateForm } from './adminReports.api'
+import { getAdminReportDetail, getAdminReportError, reportStatusUpdateSchema, updateReportStatus, type ReportAdminResponseDTO, type ReportStatusUpdateForm } from './adminReports.api'
 import { formatReportCreatedAt, reportStatusLabels, reportStatuses, type ReportResponseDTO } from './protocolConsult'
+import { ListPageSkeleton, QueryErrorState } from '../../components/feedback/AsyncStates'
+import { useAuth } from '../auth/AuthContext'
+import { AdminReportAttachments } from './AdminReportAttachments'
 
-export function AdminReportDetail({ report, onClose, onUpdated }: {
-  report: ReportResponseDTO
+export function AdminReportDetail({ protocol, onClose, onUpdated }: {
+  protocol: string
+  onClose: () => void
+  onUpdated: (report: ReportResponseDTO) => void
+}) {
+  const { session } = useAuth()
+  const allowed = session?.role === 'ADMIN' && session.passwordChanged
+  const query = useQuery({
+    queryKey: ['admin-report-detail', protocol],
+    queryFn: ({ signal }) => getAdminReportDetail(protocol, signal),
+    enabled: allowed,
+    retry: false,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  })
+
+  if (allowed && query.data && !query.isError) {
+    return <LoadedAdminReportDetail report={query.data} onClose={onClose} onUpdated={onUpdated} />
+  }
+
+  return (
+    <Dialog open fullWidth maxWidth="sm" onClose={onClose} aria-labelledby="report-detail-title">
+      <DialogTitle id="report-detail-title">Detalhe da denúncia</DialogTitle>
+      <DialogContent dividers>
+        {!allowed ? <Alert severity="error">Você não tem permissão para acessar este recurso.</Alert> : query.isError ? (
+          <QueryErrorState message={getAdminReportError(query.error)} onRetry={() => void query.refetch()} retrying={query.isFetching} />
+        ) : <ListPageSkeleton label="Carregando detalhe da denúncia…" items={2} />}
+      </DialogContent>
+      <DialogActions sx={{ p: 2 }}><Button onClick={onClose}>Fechar</Button></DialogActions>
+    </Dialog>
+  )
+}
+
+function LoadedAdminReportDetail({ report, onClose, onUpdated }: {
+  report: ReportAdminResponseDTO
   onClose: () => void
   onUpdated: (report: ReportResponseDTO) => void
 }) {
@@ -61,8 +99,12 @@ export function AdminReportDetail({ report, onClose, onUpdated }: {
           <Box component="dl" sx={{ m: 0, '& dt': { color: 'text.secondary', fontSize: '0.875rem' }, '& dd': { m: 0, mb: 2, overflowWrap: 'anywhere' } }}>
             <Typography component="dt">Categoria</Typography><Typography component="dd">{report.category}</Typography>
             <Typography component="dt">Registrada em</Typography><Typography component="dd">{formatReportCreatedAt(report.createdAt)}</Typography>
+            <Typography component="dt">Data do ocorrido</Typography><Typography component="dd">{report.incidentDate ? report.incidentDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$3/$2/$1') : 'Não informada'}</Typography>
+            <Typography component="dt">Local do ocorrido</Typography><Typography component="dd">{report.incidentLocation || 'Não informado'}</Typography>
             <Typography component="dt">Descrição</Typography><Typography component="dd" sx={{ whiteSpace: 'pre-wrap' }}>{report.description}</Typography>
           </Box>
+          <Divider />
+          <AdminReportAttachments protocol={report.protocol} attachments={report.attachments} />
           <Divider />
           <Stack component="form" id="report-status-form" noValidate onSubmit={handleSubmit((values) => {
             if (!unchanged && !saving) { setError(null); setConfirmation(values) }

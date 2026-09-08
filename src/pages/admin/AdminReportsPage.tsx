@@ -87,7 +87,7 @@ export function AdminReportsPage() {
           {data.hasNext === undefined && <Alert severity="info" sx={{ mt: 2 }}>Não foi possível determinar se há mais páginas. Tente atualizar a lista.</Alert>}
         </>
       )}
-      {selected && <AdminReportDetail key={selected.protocol} report={selected} onClose={() => setSelected(null)} onUpdated={onUpdated} />}
+      {selected && <AdminReportDetail key={selected.protocol} protocol={selected.protocol} onClose={() => setSelected(null)} onUpdated={onUpdated} />}
       <AppSnackbar feedback={feedback} onClose={() => setFeedback(null)} />
     </Box>
   )
