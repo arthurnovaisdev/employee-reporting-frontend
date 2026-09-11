@@ -49,14 +49,14 @@ export function ForgotPasswordPage() {
         <CheckCircleOutlined color="success" sx={{ fontSize: 46 }} />
         <Box>
           <Typography component="h1" variant="h5">
-            Instruções enviadas
+            Solicitação recebida
           </Typography>
           <Typography color="text.secondary" sx={{ mt: 0.75, fontSize: '0.9rem', lineHeight: 1.55 }}>
-            Enviamos o link de redefinição para o e-mail de contato cadastrado.
+            Se os dados informados estiverem associados a uma conta válida, as instruções de recuperação serão enviadas.
           </Typography>
         </Box>
         <Alert severity="info" sx={{ width: '100%', textAlign: 'left' }}>
-          Verifique também as pastas de spam e lixo eletrônico.
+          Caso receba as instruções por e-mail, verifique também as pastas de spam e lixo eletrônico.
         </Alert>
         <Button component={RouterLink} to="/login" variant="contained" fullWidth>
           Voltar ao login
@@ -96,7 +96,7 @@ export function ForgotPasswordPage() {
           Esqueci minha senha
         </Typography>
         <Typography color="text.secondary" sx={{ mt: 0.75, fontSize: '0.9rem', lineHeight: 1.55 }}>
-          Informe o CPF usado no acesso para receber as instruções no e-mail de contato cadastrado.
+          Informe o CPF usado no acesso para solicitar a recuperação da senha.
         </Typography>
       </Box>
 

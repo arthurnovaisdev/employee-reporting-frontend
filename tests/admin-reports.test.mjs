@@ -14,7 +14,7 @@ const { getAdminReports, readAdminReportPage, updateReportStatus, getAdminReport
 const { reserveAttachmentPreview, formatAttachmentSize } = await server.ssrLoadModule('/src/features/reports/adminAttachmentPreview.ts')
 const { AdminReportAttachments } = await server.ssrLoadModule('/src/features/reports/AdminReportAttachments.tsx')
 const { apiClient } = await server.ssrLoadModule('/src/lib/http/apiClient.ts')
-const { setAccessToken, getAccessToken } = await server.ssrLoadModule('/src/features/auth/tokenStore.ts')
+const { setAuthSession, getAccessToken } = await server.ssrLoadModule('/src/features/auth/authStore.ts')
 const { AuthProvider } = await server.ssrLoadModule('/src/features/auth/AuthContext.tsx')
 const { ProtectedRoute, PasswordChangedRoute, RoleRoute } = await server.ssrLoadModule('/src/features/auth/RouteGuards.tsx')
 
@@ -22,6 +22,10 @@ const report = { protocol: 'DEN-2026-1234567', category: 'Conduta interna', desc
 const response = (config, data, status = 200) => ({ config, data, status, statusText: '', headers: {} })
 const attachment = { id: '550e8400-e29b-41d4-a716-446655440002', originalFileName: 'comprovante.pdf', contentType: 'application/pdf', fileSize: 245760, createdAt: '2026-09-04T12:35:00' }
 const detail = { ...report, incidentDate: '2026-09-03', incidentLocation: 'Unidade Salvador', attachments: [attachment] }
+const authenticate = (token = 'fixture-admin', role = 'ADMIN', passwordChanged = true) => {
+  setAuthSession({ token, name: 'Teste', role, passwordChanged })
+}
+const setAccessToken = (token) => authenticate(token)
 
 test('detalhe usa protocolo, Bearer e DTO administrativo, descartando campos privados', async () => {
   setAccessToken('fixture-admin')
@@ -139,7 +143,7 @@ test('preview reserva aba, navega por blob e revoga URLs ao fechar ou descartar'
 
 test('seção de anexos exibe metadados amigáveis, vazio sem erro e ações só para ADMIN', () => {
   for (const role of ['ADMIN', 'EMPLOYEE']) {
-    window.sessionStorage = { getItem: () => JSON.stringify({ role, passwordChanged: true, token: 'fixture', name: 'Teste' }) }
+    authenticate('fixture', role)
     const client = new QueryClient()
     const h = React.createElement
     const render = (attachments) => renderToString(h(QueryClientProvider, { client }, h(AuthProvider, null,
@@ -238,7 +242,7 @@ test('guards administrativos só renderizam conteúdo para ADMIN após troca de 
   for (const [role, passwordChanged, allowed] of [
     ['EMPLOYEE', true, false], ['EMPLOYEE', false, false], ['ADMIN', false, false], ['ADMIN', true, true],
   ]) {
-    window.sessionStorage = { getItem: () => JSON.stringify({ role, passwordChanged, token: 'fixture', name: 'Teste' }) }
+    authenticate('fixture', role, passwordChanged)
     const client = new QueryClient()
     const h = React.createElement
     const html = renderToString(h(QueryClientProvider, { client }, h(AuthProvider, null,

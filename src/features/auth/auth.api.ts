@@ -2,10 +2,15 @@ import { z } from 'zod'
 import { apiClient } from '../../lib/http/apiClient'
 import type { AuthSession } from './auth.types'
 
-export interface LoginRequestDTO {
-  cpf: string
-  password: string
-}
+export const loginRequestSchema = z.object({
+  cpf: z.string().regex(/^\d{11}$/, 'Informe um CPF com 11 dígitos.'),
+  password: z
+    .string()
+    .max(100, 'A senha deve ter no máximo 100 caracteres.')
+    .refine((value) => value.trim().length > 0, 'Informe sua senha.'),
+})
+
+export type LoginRequestDTO = z.infer<typeof loginRequestSchema>
 
 export type LoginResponseDTO = AuthSession
 
@@ -33,7 +38,8 @@ const loginResponseSchema = z
   .strict()
 
 export async function login(request: LoginRequestDTO) {
-  const response = await apiClient.post<LoginResponseDTO>('/auth/login', request)
+  const validatedRequest = loginRequestSchema.parse(request)
+  const response = await apiClient.post<LoginResponseDTO>('/auth/login', validatedRequest)
   return loginResponseSchema.parse(response.data)
 }
 

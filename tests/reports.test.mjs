@@ -17,8 +17,12 @@ const {
   reportStatusLabels,
 } = await server.ssrLoadModule('/src/features/reports/protocolConsult.ts')
 const { apiClient } = await server.ssrLoadModule('/src/lib/http/apiClient.ts')
-const { setAccessToken } = await server.ssrLoadModule('/src/features/auth/tokenStore.ts')
+const { setAuthSession } = await server.ssrLoadModule('/src/features/auth/authStore.ts')
 globalThis.window = new EventTarget()
+
+const setAccessToken = (token) => {
+  setAuthSession({ token, name: 'Teste', role: 'EMPLOYEE', passwordChanged: true })
+}
 
 const categoryId = '550e8400-e29b-41d4-a716-446655440000'
 const values = { categoryId, description: 'Relato de teste.', incidentDate: '', incidentLocation: '' }

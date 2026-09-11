@@ -5,56 +5,43 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react'
 import type { AuthSession } from './auth.types'
-import { clearStoredSession, readStoredSession, writeStoredSession } from './authStorage'
-import { setAccessToken } from './tokenStore'
+import {
+  clearAuthSession,
+  getAuthSession,
+  setAuthSession,
+  subscribeAuthSession,
+} from './authStore'
 
 interface AuthContextValue {
   session: AuthSession | null
   isAuthenticated: boolean
   startSession: (session: AuthSession) => void
   endSession: () => void
-  markPasswordChanged: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
-  const [session, setSession] = useState<AuthSession | null>(() => {
-    const restoredSession = readStoredSession()
-    setAccessToken(restoredSession?.token ?? null)
-    return restoredSession
-  })
+  const session = useSyncExternalStore(
+    subscribeAuthSession,
+    getAuthSession,
+    getAuthSession,
+  )
 
   const endSession = useCallback(() => {
-    setAccessToken(null)
-    clearStoredSession()
-    setSession(null)
+    clearAuthSession()
     queryClient.clear()
   }, [queryClient])
 
   const startSession = useCallback((nextSession: AuthSession) => {
     queryClient.clear()
-    setAccessToken(nextSession.token)
-    writeStoredSession(nextSession)
-    setSession(nextSession)
+    setAuthSession(nextSession)
   }, [queryClient])
-
-  const markPasswordChanged = useCallback(() => {
-    setSession((currentSession) => {
-      if (!currentSession) {
-        return null
-      }
-
-      const updatedSession = { ...currentSession, passwordChanged: true }
-      writeStoredSession(updatedSession)
-      return updatedSession
-    })
-  }, [])
 
   useEffect(() => {
     window.addEventListener('auth:unauthorized', endSession)
@@ -67,9 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: session !== null,
       startSession,
       endSession,
-      markPasswordChanged,
     }),
-    [endSession, markPasswordChanged, session, startSession],
+    [endSession, session, startSession],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

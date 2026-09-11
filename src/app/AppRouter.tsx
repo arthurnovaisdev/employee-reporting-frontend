@@ -10,6 +10,7 @@ import {
   RoleRoute,
 } from '../features/auth/RouteGuards'
 import { ReportFlowLayout, ReportFlowShell } from '../features/reports/ReportFlowLayout'
+import { useAuth } from '../features/auth/AuthContext'
 
 const AdminCategoriesPage = lazy(() => import('../pages/admin/AdminCategoriesPage').then((module) => ({ default: module.AdminCategoriesPage })))
 const AdminReportsPage = lazy(() => import('../pages/admin/AdminReportsPage').then((module) => ({ default: module.AdminReportsPage })))
@@ -35,6 +36,7 @@ function RouteLoading() {
 
 export function AppRouter() {
   const navigate = useNavigate()
+  const { session } = useAuth()
 
   useEffect(() => {
     const eventMessage = (event: Event) => {
@@ -45,10 +47,17 @@ export function AppRouter() {
       replace: true,
       state: { authMessage: eventMessage(event) ?? 'Sua sessão expirou. Faça login novamente.' },
     })
-    const handleForbidden = (event: Event) => navigate('/forbidden', {
-      replace: true,
-      state: { accessMessage: eventMessage(event) },
-    })
+    const handleForbidden = (event: Event) => {
+      if (session?.passwordChanged === false) {
+        navigate('/change-password', { replace: true })
+        return
+      }
+
+      navigate('/forbidden', {
+        replace: true,
+        state: { accessMessage: eventMessage(event) },
+      })
+    }
 
     window.addEventListener('auth:unauthorized', handleUnauthorized)
     window.addEventListener('auth:forbidden', handleForbidden)
@@ -57,7 +66,7 @@ export function AppRouter() {
       window.removeEventListener('auth:unauthorized', handleUnauthorized)
       window.removeEventListener('auth:forbidden', handleForbidden)
     }
-  }, [navigate])
+  }, [navigate, session?.passwordChanged])
 
   return (
     <Suspense fallback={<RouteLoading />}>

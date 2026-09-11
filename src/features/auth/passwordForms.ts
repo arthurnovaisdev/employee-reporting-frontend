@@ -7,8 +7,8 @@ import type {
 
 const newPasswordSchema = z
   .string()
-  .min(8, 'A nova senha deve ter entre 8 e 100 caracteres.')
-  .max(100, 'A nova senha deve ter entre 8 e 100 caracteres.')
+  .min(6, 'A nova senha deve ter entre 6 e 100 caracteres.')
+  .max(100, 'A nova senha deve ter entre 6 e 100 caracteres.')
   .refine((value) => value.trim().length > 0, 'Informe a nova senha.')
 
 const confirmationSchema = z
@@ -19,6 +19,10 @@ const confirmationSchema = z
 export const forgotPasswordSchema = z.object({
   cpf: z.string().regex(/^\d{11}$/, 'Informe um CPF com 11 dígitos.'),
 })
+
+export const resetTokenSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{43}$/, 'O token de recuperação é inválido.')
 
 export const resetPasswordSchema = z
   .object({
@@ -32,7 +36,10 @@ export const resetPasswordSchema = z
 
 export const changePasswordSchema = z
   .object({
-    currentPassword: z.string().refine((value) => value.trim().length > 0, 'Informe a senha atual.'),
+    currentPassword: z
+      .string()
+      .max(100, 'A senha atual deve ter no máximo 100 caracteres.')
+      .refine((value) => value.trim().length > 0, 'Informe a senha atual.'),
     newPassword: newPasswordSchema,
     confirmNewPassword: confirmationSchema,
   })

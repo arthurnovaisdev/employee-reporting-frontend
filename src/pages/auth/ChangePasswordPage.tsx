@@ -31,7 +31,7 @@ export function ChangePasswordPage() {
   const [showConfirmation, setShowConfirmation] = useState(false)
   const [requestError, setRequestError] = useState<string | null>(null)
   const navigate = useNavigate()
-  const { endSession, markPasswordChanged, session } = useAuth()
+  const { endSession, session } = useAuth()
   const firstAccess = session?.passwordChanged === false
   const {
     register,
@@ -54,8 +54,11 @@ export function ChangePasswordPage() {
     try {
       await changePassword(toChangePasswordRequest(values))
       reset()
-      markPasswordChanged()
-      navigate(session?.role === 'ADMIN' ? '/admin/reports' : '/home', { replace: true })
+      endSession()
+      navigate('/login', {
+        replace: true,
+        state: { loginNotice: 'Senha alterada com sucesso. Entre novamente para continuar.' },
+      })
     } catch (error) {
       reset()
       const details = getApiValidationDetails(error)
@@ -117,7 +120,7 @@ export function ChangePasswordPage() {
         </Box>
 
         <Alert severity="info">
-          Informe a senha atual e escolha uma nova senha com pelo menos 8 caracteres.
+          Informe a senha atual e escolha uma nova senha com pelo menos 6 caracteres.
         </Alert>
 
         {requestError && (
@@ -137,6 +140,7 @@ export function ChangePasswordPage() {
           size="small"
           disabled={isSubmitting}
           slotProps={{
+            htmlInput: { maxLength: 100 },
             input: {
               endAdornment: passwordAdornment(showCurrentPassword, () =>
                 setShowCurrentPassword((visible) => !visible),
@@ -193,7 +197,7 @@ export function ChangePasswordPage() {
           sx={{ minHeight: 42 }}
           startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : undefined}
         >
-          {isSubmitting ? 'Salvando…' : firstAccess ? 'Salvar e continuar' : 'Salvar nova senha'}
+          {isSubmitting ? 'Salvando…' : firstAccess ? 'Salvar e entrar novamente' : 'Salvar nova senha'}
         </Button>
 
         <Button

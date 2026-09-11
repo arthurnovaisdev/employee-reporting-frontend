@@ -24,7 +24,7 @@ const {
   readCategoryPage,
 } = await server.ssrLoadModule('/src/features/reports/categories.api.ts')
 const { apiClient } = await server.ssrLoadModule('/src/lib/http/apiClient.ts')
-const { setAccessToken } = await server.ssrLoadModule('/src/features/auth/tokenStore.ts')
+const { setAuthSession } = await server.ssrLoadModule('/src/features/auth/authStore.ts')
 const { AuthProvider } = await server.ssrLoadModule('/src/features/auth/AuthContext.tsx')
 const { PasswordChangedRoute, ProtectedRoute, RoleRoute } = await server.ssrLoadModule('/src/features/auth/RouteGuards.tsx')
 
@@ -43,6 +43,10 @@ const category = {
   active: true,
 }
 const response = (config, data, status = 200) => ({ config, data, status, statusText: '', headers: {} })
+const authenticate = (token = 'fixture-admin', role = 'ADMIN', passwordChanged = true) => {
+  setAuthSession({ token, name: 'Teste', role, passwordChanged })
+}
+const setAccessToken = (token) => authenticate(token)
 
 test('listagem de usuários usa a paginação própria do endpoint', async () => {
   setAccessToken('fixture-admin')
@@ -140,9 +144,7 @@ test('categorias administrativas usam somente GET paginado e POST com CategoryRe
 
 test('rota administrativa de categorias bloqueia EMPLOYEE e permite ADMIN', () => {
   for (const [role, allowed] of [['EMPLOYEE', false], ['ADMIN', true]]) {
-    window.sessionStorage = {
-      getItem: () => JSON.stringify({ role, passwordChanged: true, token: 'fixture', name: 'Teste' }),
-    }
+    authenticate('fixture', role)
     const client = new QueryClient()
     const h = React.createElement
     const html = renderToString(h(QueryClientProvider, { client }, h(AuthProvider, null,

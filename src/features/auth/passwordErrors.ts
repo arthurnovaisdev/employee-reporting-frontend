@@ -1,21 +1,26 @@
 import axios from 'axios'
 
 interface ErrorResponse {
-  erro?: string
+  erro?: unknown
+  detalhes?: unknown
 }
 
-const expiredMessage = 'O link de recuperação expirou. Solicite um novo.'
-const usedMessage = 'Este link de recuperação já foi utilizado.'
-const invalidMessage = 'Token inválido ou não encontrado.'
+const invalidTokenMessage = 'O link de recuperação é inválido ou expirou. Solicite um novo.'
 
 export function getTerminalResetTokenError(error: unknown) {
   if (!axios.isAxiosError<ErrorResponse>(error)) return null
 
-  const message = error.response?.data?.erro
+  if (error.response?.status !== 400) return null
 
-  if (error.response?.status === 404) return invalidMessage
-  if (error.response?.status === 400 && message === expiredMessage) return expiredMessage
-  if (error.response?.status === 400 && message === usedMessage) return usedMessage
+  const data = error.response.data
+  const tokenValidationError = data?.detalhes
+    && typeof data.detalhes === 'object'
+    && !Array.isArray(data.detalhes)
+    && typeof (data.detalhes as Record<string, unknown>).token === 'string'
+
+  if (data?.erro === 'Token inválido ou expirado.' || tokenValidationError) {
+    return invalidTokenMessage
+  }
 
   return null
 }

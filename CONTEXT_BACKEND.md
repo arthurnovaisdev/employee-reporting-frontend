@@ -1,41 +1,37 @@
-# Contexto do backend para integração do frontend
+# Contexto atual do backend para integração do frontend
 
-> Toda IA responsável pelo frontend deve ler este documento antes de implementar ou alterar qualquer integração com o backend.
+> Fonte de verdade: código atual do projeto `employee-reporting`. Não invente rotas, parâmetros, DTOs, campos, enums ou comportamentos que não estejam documentados aqui.
 
-O frontend será desenvolvido em outro projeto e outro repositório, sem acesso ao código deste backend. Use exatamente os endpoints, campos e valores de enums documentados. Não invente contratos. Sempre que o backend mudar, este documento deverá ser atualizado.
+## 1. Base da API
 
-Este documento descreve o código-fonte analisado, sem execução da API. Exemplos usam dados fictícios; tokens indicados por placeholders não são tokens válidos. Comportamentos dependentes da serialização ou infraestrutura estão identificados explicitamente.
+- Base path: `/api`.
+- Ambiente local: `http://localhost:8080/api`.
+- Backend online atual: `https://employee-reporting-api-v9fh.onrender.com`.
+- Base completa online: `https://employee-reporting-api-v9fh.onrender.com/api`.
 
-## 1. Visão geral
+O frontend deve obter a base completa da API por variável de ambiente, por exemplo `VITE_API_BASE_URL`, sem fixar host no código. Use uma configuração para desenvolvimento local e outra para o ambiente online. As rotas deste documento já contêm `/api`; não duplique esse segmento.
 
-`employee-reporting` expõe uma API REST para um canal interno de comunicação e denúncias. Inclui autenticação por CPF e senha, usuários, categorias, denúncias, acompanhamento por protocolo e código, alteração administrativa de status, anexos e recuperação de senha por e-mail.
+## 2. Autenticação
 
-A denúncia não armazena um relacionamento com o usuário denunciante, mas suas rotas exigem autenticação. Portanto, não apresentar o serviço como acessível sem login nem prometer anonimato absoluto de infraestrutura.
+### Login
 
-As respostas usam DTOs planos: por exemplo, `category` em uma denúncia é o nome da categoria, não um objeto nem seu ID. O projeto usa Spring MVC, Spring Security, JWT, Jakarta Validation e persistência JPA/PostgreSQL. O `pom.xml` declara Java 25, Spring Boot 4.1.1, JJWT 0.12.6 e Springdoc 2.8.5.
+`POST /api/auth/login` é público e usa CPF + senha.
 
-## 2. Base URL
-
-Base local: **`http://localhost:8080/api`**.
-
-Confirmada por `server.port=8080` em `src/main/resources/application.properties` e pelos mappings `/api/auth`, `/api/categories`, `/api/reports` e `api/users` dos controllers. Não há context path adicional configurado. A ausência da barra inicial no mapping de `UserController` não cria outra base.
-
-Configure essa base no cliente HTTP e acrescente, por exemplo, `/auth/login`, resultando em `http://localhost:8080/api/auth/login`. As rotas abaixo já incluem `/api`; não duplique esse segmento.
-
-Swagger/OpenAPI: há configuração `bearerAuth` e lib Springdoc. Os caminhos padrão explicitamente liberados na segurança são `http://localhost:8080/swagger-ui.html`, `http://localhost:8080/swagger-ui/index.html` e `http://localhost:8080/v3/api-docs` (também seus subcaminhos). Eles ficam fora da base `/api`. Não há override de URL configurado; disponibilidade e compatibilidade das dependências devem ser confirmadas em runtime. A declaração global de Bearer no OpenAPI não substitui as regras reais de segurança abaixo.
-
-## 3. Autenticação e autorização
-
-### Login e JWT
-
-`POST /api/auth/login` recebe `LoginRequestDTO` e retorna `LoginResponseDTO` com HTTP 200:
+Request — `LoginRequestDTO`:
 
 ```json
 {
   "cpf": "00000000000",
-  "password": "SenhaExemplo123"
+  "password": "SenhaExemplo"
 }
 ```
+
+| Campo | Tipo | Regras |
+| --- | --- | --- |
+| `cpf` | string | Obrigatório; exatamente 11 dígitos, sem máscara |
+| `password` | string | Obrigatório; máximo de 100 caracteres |
+
+Response `200` — `LoginResponseDTO`:
 
 ```json
 {
@@ -46,199 +42,177 @@ Swagger/OpenAPI: há configuração `bearerAuth` e lib Springdoc. Os caminhos pa
 }
 ```
 
-CPF é string de exatamente 11 dígitos, sem pontuação; e-mail não é credencial de login. Em requisições protegidas, envie:
+O response não contém CPF, ID, e-mail, tempo de expiração nem refresh token. Os únicos valores atuais de `role` são `EMPLOYEE` e `ADMIN`.
+
+### Uso do JWT
+
+Nas rotas protegidas, enviar:
 
 ```http
-Authorization: Bearer <TOKEN>
+Authorization: Bearer <JWT>
 ```
 
-`token` vem sem o prefixo `Bearer`. O filtro exige o prefixo literal `Bearer `, com espaço. O JWT é assinado, no formato compacto, com claims `sub` (CPF), `role` (authority `ROLE_EMPLOYEE` ou `ROLE_ADMIN`), `iat` e `exp`. A assinatura usa chave HMAC; o algoritmo específico não é fixado explicitamente em `signWith(getKey())`. Não é necessário interpretar o JWT para obter a role: a resposta de login já retorna `EMPLOYEE` ou `ADMIN`.
+O backend é stateless e não usa cookies de autenticação. Não há endpoints de refresh ou logout; logout no frontend significa descartar o token.
 
-`jwt.expiration-ms=86400000`: validade configurada de 24 horas a partir da emissão. Não existem endpoints de refresh ou logout. A sessão é stateless e CSRF está desabilitado. Logout é descarte do token no frontend; não há revogação implementada. Trocar ou redefinir senha não invalida JWTs já emitidos no código atual.
+A validade configurada do JWT é:
 
-### Permissões reais
+- desenvolvimento: 24 horas;
+- staging e produção: 2 horas.
 
-| Grupo | Regra |
-| --- | --- |
-| `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password` | Público |
-| Swagger/OpenAPI nos caminhos citados | Público |
-| `/api/auth/register` | ADMIN |
-| `/api/users/me/**` | Autenticado |
-| Demais rotas `/api/users/**` | ADMIN |
-| `/api/reports/admin/**` | ADMIN |
-| POST `/api/reports` | EMPLOYEE |
-| POST `/api/reports/*/attachments` | EMPLOYEE |
-| GET `/api/reports/consult` | EMPLOYEE |
-| GET `/api/categories` | EMPLOYEE ou ADMIN |
-| POST `/api/categories` | ADMIN |
+O JWT inclui uma versão de token vinculada ao usuário. Trocar ou redefinir a senha e ativar ou desativar a conta incrementam essa versão e invalidam tokens emitidos anteriormente. Usuário desativado também é rejeitado pelo filtro JWT com `401`.
 
-Somente `EMPLOYEE` e `ADMIN` existem. As rotas de criação de denúncia, envio de anexos e consulta por protocolo + código são exclusivas de `EMPLOYEE`; uma conta `ADMIN` recebe 403 ao tentar utilizá-las. A conta administrativa acessa denúncias exclusivamente por `/api/reports/admin/**`. Caso uma pessoa do RH também precise registrar ou acompanhar uma denúncia como funcionária, deve usar uma conta `EMPLOYEE` separada da conta `ADMIN`.
+### `passwordChanged`
 
-As authorities são construídas a partir do usuário consultado no banco a cada autenticação por JWT, não diretamente da claim `role`. As demais URLs caem em `anyRequest().authenticated()`; isso não significa que possuam endpoint nem amplia o acesso aos matchers específicos declarados antes dessa regra.
+Usuários criados começam com `passwordChanged=false`. Essa flag não é apenas informativa: o backend bloqueia as demais rotas autenticadas até que a senha provisória seja trocada. O fluxo exato está na seção 4.
 
-### Primeiro acesso, usuário desativado e falhas de token
+### Tratamento de `401` e `403`
 
-Usuários cadastrados começam com `active=true` e `passwordChanged=false`. O login informa `passwordChanged`, mas nenhuma regra da segurança bloqueia outras operações até a troca de senha.
+- `401 Unauthorized`: credenciais de login incorretas, token ausente, inválido, malformado ou expirado, token invalidado por mudança de versão, ou usuário desativado/não encontrado. Em uma rota protegida, o frontend deve encerrar a sessão local e solicitar novo login.
+- `403 Forbidden`: o token é válido, mas a role não permite a operação, ou o usuário ainda está no primeiro acesso. Não tratar todo `403` como token expirado; no primeiro acesso, encaminhar à troca de senha.
 
-`UserDetailsImpl.isEnabled()` reflete `active`, permitindo ao mecanismo de login rejeitar usuário desativado. Não há handler específico para `DisabledException`: o handler genérico pode responder 500, em vez de um erro específico de conta desativada. Confirmar a resposta efetiva em runtime.
+Evite enviar um Bearer antigo nas rotas públicas: o filtro JWT é executado também nelas e pode rejeitar um token inválido antes de o controller ser chamado.
 
-**O filtro JWT não verifica `isEnabled()`**: um usuário desativado ainda pode ser autenticado com JWT válido, pois a validação compara CPF e expiração. Não assumir que desativar conta revoga sessões.
+## 3. Roles e autorização
 
-O filtro retorna 401 para JWT expirado ou `JwtException`; usuário não encontrado ao carregar o JWT também gera 401. Ausência de token em rota protegida gera 401. Nem todo conteúdo inválido necessariamente vira 401: exceções fora das categorias tratadas caem no 500 genérico do filtro. O filtro também roda em endpoints públicos; evite enviar JWT vencido em login ou recuperação, pois ele pode impedir essas chamadas.
+Existem somente duas roles.
 
-## 4. Endpoints
+### `EMPLOYEE`
 
-Convenções aplicáveis a **cada endpoint** abaixo:
+Pode:
 
-- Prefixo de host: `http://localhost:8080`. Todas as rotas listadas incluem `/api`.
-- Requisições com body JSON usam `Content-Type: application/json`; respostas DTO são JSON. GET e PATCH sem body não precisam de Content-Type. Upload usa `multipart/form-data` com boundary gerado pelo cliente.
-- Onde consta “nenhum”, não há path/query/body definido no controller. Não enviar propriedades extras.
-- Toda rota protegida pode responder 401; rotas com role podem responder 403. Todas podem ter 500 por falha interna. Regras de 400/404/409 específicas estão listadas por operação. Formatos dos erros estão na seção 8.
-- Resposta “sem corpo” é vazia, não `{}` e não `null` serializado. Não chamar parsing JSON obrigatório nessas respostas.
-- Exemplos completos dos DTOs referenciados estão na seção 5; isso também define os corpos das operações, sem campos adicionais implícitos.
+- acessar `GET /api/users/me`;
+- trocar a própria senha em `PATCH /api/users/me/password`;
+- listar categorias ativas em `GET /api/categories`;
+- criar denúncia em `POST /api/reports`;
+- enviar anexos em `POST /api/reports/{protocol}/attachments`;
+- consultar denúncia por protocolo + código em `GET /api/reports/consult`.
 
-### AuthController — 4 endpoints
+Não pode acessar `/api/users` administrativo, criar categorias nem acessar `/api/reports/admin/**`.
 
-| Método e rota | Finalidade / acesso | Path / query | Body | Sucesso | Principais erros específicos |
-| --- | --- | --- | --- | --- | --- |
-| POST `/api/auth/login` | Login por CPF; público | Nenhum / nenhum | `LoginRequestDTO` | 200, `LoginResponseDTO` | 400 validação; 401 CPF/senha inválidos; caso de desativação descrito na seção 3 |
-| POST `/api/auth/register` | Criar usuário; ADMIN | Nenhum / nenhum | `RegisterRequestDTO` | 201, sem corpo | 400 validação ou CPF já cadastrado; 409 restrição de banco |
-| POST `/api/auth/forgot-password` | Solicitar recuperação por e-mail; público | Nenhum / nenhum | `ForgotPasswordRequestDTO` | 200, sem corpo | 400 validação ou falta de e-mail de contato; 404 usuário não encontrado; 500 falha de envio |
-| POST `/api/auth/reset-password` | Redefinir senha; público | Nenhum / nenhum | `ResetPasswordRequestDTO` | 200, sem corpo | 400 validação, token usado ou expirado; 404 token inválido/não encontrado |
+### `ADMIN`
 
-Cadastro sempre cria `EMPLOYEE`; não recebe `role`, `active` ou `passwordChanged`. Não existe cadastro público, criação de ADMIN via API ou envio automático de senha provisória por e-mail nesse fluxo.
+Pode:
 
-### CategoryController — 2 endpoints
+- acessar o próprio perfil e trocar a própria senha;
+- cadastrar usuários `EMPLOYEE` em `POST /api/auth/register`;
+- listar, consultar, ativar e desativar usuários;
+- listar e criar categorias;
+- listar denúncias, abrir detalhe, baixar anexos e atualizar status pelas rotas `/api/reports/admin/**`.
 
-| Método e rota | Finalidade / acesso | Path / query | Body | Sucesso | Principais erros específicos |
-| --- | --- | --- | --- | --- | --- |
-| POST `/api/categories` | Criar categoria; ADMIN | Nenhum / nenhum | `CategoryRequestDTO` | 201, `CategoryResponseDTO` | 400 validação; 409 nome duplicado/restrição de banco |
-| GET `/api/categories` | Listar categorias; EMPLOYEE ou ADMIN | Nenhum / `page`, `size`, `sort` | Nenhum | 200, `Page<CategoryResponseDTO>` | 500 em falhas de consulta, inclusive ordenação não suportada conforme resolução em runtime |
+`ADMIN` não atua como denunciante: não pode criar denúncia, enviar anexos pelo fluxo do denunciante nem consultar por protocolo + código. O frontend não deve oferecer essas ações a uma sessão `ADMIN`.
 
-A listagem não filtra `active`; retorna também categorias inativas. Não existem consulta individual, edição, ativação, desativação ou exclusão de categoria pela API.
+Todas as rotas não liberadas explicitamente são negadas por padrão.
 
-### ReportController — 7 endpoints
+## 4. Primeiro acesso
 
-| Método e rota | Finalidade / acesso | Path / query | Body | Sucesso | Principais erros específicos |
-| --- | --- | --- | --- | --- | --- |
-| POST `/api/reports` | Criar denúncia; EMPLOYEE | Nenhum / nenhum | `ReportRequestDTO` | 201, `ProtocolResponseDTO` | 400 validação; 404 categoria não encontrada; 409 restrição de banco |
-| POST `/api/reports/{protocol}/attachments` | Anexar arquivos; EMPLOYEE | `protocol`: String / `trackingCode`: String obrigatório, enviar como campo textual multipart | Multipart com `trackingCode` e `files`, múltiplos arquivos | 201, sem corpo | 400 código incorreto; 404 denúncia não encontrada; arquivos inválidos lançam exceções sem handler específico, podendo resultar em 500; limites multipart dependem do tratamento em runtime |
-| GET `/api/reports/consult` | Consultar por protocolo e código; EMPLOYEE | Nenhum / `protocol`: String obrigatório, `code`: String obrigatório | Nenhum | 200, `ReportResponseDTO` | 404 protocolo não encontrado ou código incorreto; ausência de parâmetro sem handler específico, ver seção 8 |
-| GET `/api/reports/admin` | Listar todas as denúncias; ADMIN | Nenhum / `page`, `size` | Nenhum | 200, `Page<ReportResponseDTO>` | 500 falhas de consulta/paginação |
-| GET `/api/reports/admin/{protocol}` | Obter o detalhe administrativo de uma denúncia; ADMIN | `protocol`: String / nenhum | Nenhum | 200, `ReportAdminResponseDTO` | 404 denúncia não encontrada |
-| GET `/api/reports/admin/{protocol}/attachments/{attachmentId}` | Abrir/baixar um anexo da denúncia; ADMIN | `protocol`: String, `attachmentId`: UUID / nenhum | Nenhum | 200, corpo binário (`Resource`), `Content-Type` original e `Content-Disposition: inline` com o nome original | 404 anexo inexistente ou não pertencente ao protocolo; UUID malformado: erro de conversão; falha de leitura do arquivo pode resultar em 500 |
-| PATCH `/api/reports/admin/{protocol}/status` | Alterar status; ADMIN | `protocol`: String / nenhum | `ReportStatusUpdateRequestDTO` | 200, `ReportResponseDTO` | 400 validação; 404 denúncia não encontrada; enum inválido é erro de conversão, ver seção 8 |
+Enquanto `passwordChanged=false`, continuam acessíveis:
 
-Exemplo de consulta: `http://localhost:8080/api/reports/consult?protocol=DEN-2026-1234567&code=ABC234`. Os valores são fictícios. Use codificação de query parameters; não registre a URL com código em logs ou analytics.
+- `POST /api/auth/login`;
+- `POST /api/auth/forgot-password`;
+- `POST /api/auth/reset-password`;
+- `GET /api/users/me`;
+- `PATCH /api/users/me/password`;
+- Swagger/OpenAPI, quando habilitado no ambiente.
 
-Regras confirmadas em `ReportService`:
+Qualquer outra rota autenticada retorna `403` com:
 
-- Categoria precisa existir, mas `active` não é verificado na criação.
-- Protocolo gerado: `DEN-<ano corrente>-<7 dígitos>`. Há unicidade no banco, mas não há tentativa adicional programada em caso de colisão.
-- `trackingCode` possui 6 caracteres sorteados com `SecureRandom` do conjunto `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`. É armazenado somente como hash BCrypt e retornado em texto apenas na criação. Não há recuperação nem reemissão desse código.
-- Para consultar, o campo de query se chama **`code`**, não `trackingCode`. A comparação usa BCrypt e não normaliza espaços ou caixa.
-- Estado inicial: `RECEIVED`. Não há restrições de transição entre os valores do enum. Atualizar para o mesmo status retorna a denúncia sem gravar histórico/auditoria e sem salvar a nova `note`.
-- Mudança efetiva cria `StatusHistory` com o novo status e `observation` recebida de `note`, além de `AuditLog` com o administrador e a ação `UPDATE_STATUS: <antigo> -> <novo>`.
-- A consulta do funcionário, a listagem administrativa e a alteração de status retornam `ReportResponseDTO`. O novo detalhe administrativo retorna `ReportAdminResponseDTO`, que acrescenta `incidentDate`, `incidentLocation` e `attachments` aos dados da denúncia.
-- O detalhe administrativo não retorna ID interno da denúncia, `categoryId`, `updatedAt`, tracking code, histórico ou observações. Cada item de `attachments` expõe somente os metadados de `AttachmentResponseDTO`.
-- Não existem atualização de descrição/categoria/data/local, exclusão de denúncia, comentários, listagem “minhas denúncias” ou filtros de busca/status além da paginação.
+```json
+{
+  "status": 403,
+  "erro": "É necessário alterar a senha provisória antes de utilizar o sistema.",
+  "timestamp": "<data-hora>"
+}
+```
 
-### UserController — 6 endpoints
+Para concluir o primeiro acesso, use `PATCH /api/users/me/password`. O sucesso é `204` sem corpo, define `passwordChanged=true` e invalida o JWT atual; o frontend deve remover esse token e solicitar novo login.
 
-| Método e rota | Finalidade / acesso | Path / query | Body | Sucesso | Principais erros específicos |
-| --- | --- | --- | --- | --- | --- |
-| GET `/api/users/me` | Perfil do usuário autenticado | Nenhum / nenhum | Nenhum | 200, `UserResponseDTO` | Erros comuns de autenticação |
-| GET `/api/users` | Listar usuários; ADMIN | Nenhum / `page`, `size`, `sort` | Nenhum | 200, `Page<UserResponseDTO>` | 500 falhas de consulta/ordenação |
-| GET `/api/users/{id}` | Consultar usuário; ADMIN | `id`: UUID / nenhum | Nenhum | 200, `UserResponseDTO` | 404 usuário não encontrado; UUID malformado: erro de conversão |
-| PATCH `/api/users/me/password` | Trocar própria senha; autenticado | Nenhum / nenhum | `ChangePasswordRequestDTO` | 204, sem corpo | 400 validação, senha atual incorreta ou nova senha igual à atual; 404 usuário não encontrado |
-| PATCH `/api/users/{id}/deactivate` | Desativar usuário; ADMIN | `id`: UUID / nenhum | Nenhum | 204, sem corpo | 404 usuário não encontrado; UUID malformado: erro de conversão |
-| PATCH `/api/users/{id}/activate` | Ativar usuário; ADMIN | `id`: UUID / nenhum | Nenhum | 204, sem corpo | 404 usuário não encontrado; UUID malformado: erro de conversão |
+## 5. Usuários
 
-Listagem inclui ativos e inativos. Ativação/desativação apenas atribui `active`, sem proteção específica contra desativar a si mesmo ou outro ADMIN. Não existem edição de perfil, mudança de role, alteração de e-mail, exclusão de usuário ou troca de senha de terceiro nesses endpoints.
+### Endpoints
 
-## 5. DTOs e contratos JSON
+| Método | Endpoint | Acesso | Request | Sucesso |
+| --- | --- | --- | --- | --- |
+| `GET` | `/api/users/me` | `EMPLOYEE` ou `ADMIN` | Sem body | `200 UserResponseDTO` |
+| `PATCH` | `/api/users/me/password` | `EMPLOYEE` ou `ADMIN` | `ChangePasswordRequestDTO` | `204`, sem corpo |
+| `GET` | `/api/users` | `ADMIN` | Query `page`, `size` | `200 Page<UserResponseDTO>` |
+| `GET` | `/api/users/{id}` | `ADMIN` | `id` UUID no path | `200 UserResponseDTO` |
+| `PATCH` | `/api/users/{id}/deactivate` | `ADMIN` | `id` UUID no path; sem body | `204`, sem corpo |
+| `PATCH` | `/api/users/{id}/activate` | `ADMIN` | `id` UUID no path; sem body | `204`, sem corpo |
 
-Os DTOs HTTP são records Java sem renomeação de propriedades JSON. UUID é representado como string. Campos opcionais de referência aceitam `null` no contrato de validação; não assumir que a propriedade sempre estará presente em todas as configurações de serialização. As responses não declaram Jakarta Validation; a obrigatoriedade abaixo descreve os valores produzidos pelos serviços e seus campos nullable.
-
-Datas: `LocalDate` representa data sem horário, no formato ISO `YYYY-MM-DD`. `LocalDateTime` não contém fuso horário; não acrescente `Z` nem presuma UTC. Os exemplos mostram ISO `YYYY-MM-DDTHH:mm:ss`. Não há formatação Jackson customizada para responses MVC; confirmar em runtime a serialização efetiva e a precisão fracionária. O timestamp dos erros do filtro tem uma ressalva específica na seção 8.
-
-### Request DTOs
-
-#### LoginRequestDTO
-
-| Campo | Tipo Java / JSON | Obrigatório | Validações / formato |
-| --- | --- | --- | --- |
-| `cpf` | String / string | Sim | `@NotBlank`, `@Pattern` com `\d{11}`; 11 dígitos sem máscara |
-| `password` | String / string | Sim | `@NotBlank`, `@Size(min=8,max=100)` |
-
-Exemplo na seção 3. A validação de CPF não calcula dígitos verificadores.
-
-#### RegisterRequestDTO
-
-| Campo | Tipo Java / JSON | Obrigatório | Validações / formato |
-| --- | --- | --- | --- |
-| `name` | String / string | Sim | `@NotBlank`, `@Size(max=150)` |
-| `cpf` | String / string | Sim | `@NotBlank`, `@Pattern` com `\d{11}` |
-| `contactEmail` | String / string ou null | Não | `@Email`, `@Size(max=150)`; não há `@NotBlank` |
-| `password` | String / string | Sim | Senha provisória; `@NotBlank`, `@Size(min=8,max=100)` |
+O cadastro relacionado a usuários fica em `POST /api/auth/register`, exclusivo de `ADMIN`:
 
 ```json
 {
   "name": "Pessoa Exemplo",
   "cpf": "00000000000",
   "contactEmail": "pessoa@example.com",
-  "password": "SenhaExemplo123"
+  "password": "SenhaProvisoria"
 }
 ```
 
-#### ForgotPasswordRequestDTO
+`RegisterRequestDTO`:
 
-| Campo | Tipo Java / JSON | Obrigatório | Validações / formato |
-| --- | --- | --- | --- |
-| `cpf` | String / string | Sim | `@NotBlank`, `@Pattern` com `\d{11}` |
+- `name`: obrigatório, máximo 150 caracteres;
+- `cpf`: obrigatório, exatamente 11 dígitos;
+- `contactEmail`: opcional, e-mail válido, máximo 150 caracteres;
+- `password`: obrigatória, entre 6 e 100 caracteres.
+
+O cadastro retorna `201` sem corpo e sempre cria `EMPLOYEE`, ativo, com `passwordChanged=false`. Não há criação de `ADMIN` por endpoint.
+
+`UserResponseDTO`:
 
 ```json
 {
-  "cpf": "00000000000"
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Pessoa Exemplo",
+  "cpf": "00000000000",
+  "contactEmail": "pessoa@example.com",
+  "role": "EMPLOYEE",
+  "active": true,
+  "passwordChanged": true
 }
 ```
 
-#### ResetPasswordRequestDTO
+`contactEmail` pode ser `null`.
 
-| Campo | Tipo Java / JSON | Obrigatório | Validações / formato |
-| --- | --- | --- | --- |
-| `token` | String / string | Sim | `@NotBlank`; enviar exatamente o token do link; não há validação sintática de UUID no DTO |
-| `newPassword` | String / string | Sim | `@NotBlank`, `@Size(min=8,max=100)` |
+`ChangePasswordRequestDTO`:
 
 ```json
 {
-  "token": "<TOKEN_DO_LINK>",
-  "newPassword": "NovaSenhaExemplo123"
+  "currentPassword": "SenhaAtual",
+  "newPassword": "NovaSenha"
 }
 ```
 
-#### ChangePasswordRequestDTO
+- `currentPassword`: obrigatória, máximo 100 caracteres;
+- `newPassword`: obrigatória, entre 6 e 100 caracteres;
+- a nova senha não pode ser igual à atual.
 
-| Campo | Tipo Java / JSON | Obrigatório | Validações / formato |
-| --- | --- | --- | --- |
-| `currentPassword` | String / string | Sim | `@NotBlank`; sem `@Size` nesse campo |
-| `newPassword` | String / string | Sim | `@NotBlank`, `@Size(min=8,max=100)` |
+### Paginação de usuários
 
-```json
-{
-  "currentPassword": "SenhaExemplo123",
-  "newPassword": "NovaSenhaExemplo123"
-}
-```
+`GET /api/users` aceita somente:
 
-Não há campo de confirmação de senha na API. Confirmação, se oferecida, é validação local do frontend. O service impede reutilizar a senha atual, embora a mensagem a chame de “senha provisória”.
+- `page`: padrão `0`, mínimo `0`;
+- `size`: padrão `20`, mínimo `1`, máximo `50`.
 
-#### CategoryRequestDTO
+A ordem é fixa por `name ASC`, construída pelo controller. A listagem inclui usuários ativos e inativos.
 
-| Campo | Tipo Java / JSON | Obrigatório | Validações / formato |
-| --- | --- | --- | --- |
-| `name` | String / string | Sim | `@NotBlank`, `@Size(max=100)` |
-| `active` | boolean / boolean | Sem validação de presença | Primitivo, não representa null; enviar explicitamente `true` ou `false` |
+O retorno é o `Page<UserResponseDTO>` padrão do Spring, sem DTO de paginação próprio. O frontend deve consumir principalmente `content`, `number`, `size`, `totalElements`, `totalPages`, `first`, `last`, `empty` e `numberOfElements`.
+
+### Ativação e desativação
+
+Um `ADMIN` não pode desativar a própria conta; a tentativa retorna `400` com `Você não pode desativar a própria conta.`. Alterações efetivas de `active` invalidam os JWTs anteriores do usuário afetado.
+
+Não existem endpoints atuais para editar perfil, CPF, e-mail ou role, excluir usuário ou alterar a senha de outra pessoa.
+
+## 6. Categorias
+
+| Método | Endpoint | Acesso | Request | Sucesso |
+| --- | --- | --- | --- | --- |
+| `GET` | `/api/categories` | `EMPLOYEE` ou `ADMIN` | Query `page`, `size` | `200 Page<CategoryResponseDTO>` |
+| `POST` | `/api/categories` | `ADMIN` | `CategoryRequestDTO` | `201 CategoryResponseDTO` |
+
+`CategoryRequestDTO`:
 
 ```json
 {
@@ -247,62 +221,10 @@ Não há campo de confirmação de senha na API. Confirmação, se oferecida, é
 }
 ```
 
-Não há default explícito no DTO para `active`; ausência/null depende do binding Jackson de primitivo, portanto não depender de coerção automática.
+- `name`: obrigatório, máximo 100 caracteres;
+- `active`: boolean primitivo; envie explicitamente `true` ou `false`.
 
-#### ReportRequestDTO
-
-| Campo | Tipo Java / JSON | Obrigatório | Validações / formato |
-| --- | --- | --- | --- |
-| `categoryId` | UUID / string | Sim | `@NotNull`; UUID de categoria existente |
-| `description` | String / string | Sim | `@NotBlank`, `@Size(max=5000)` |
-| `incidentDate` | LocalDate / string ou null | Não | ISO `YYYY-MM-DD`; sem validação de passado/futuro |
-| `incidentLocation` | String / string ou null | Não | Sem validação Jakarta de comprimento; não confundir ausência de limite no DTO com ausência de restrição no banco |
-
-```json
-{
-  "categoryId": "550e8400-e29b-41d4-a716-446655440000",
-  "description": "Descrição fictícia do ocorrido.",
-  "incidentDate": "2026-09-01",
-  "incidentLocation": "Unidade de exemplo"
-}
-```
-
-#### ReportStatusUpdateRequestDTO
-
-| Campo | Tipo Java / JSON | Obrigatório | Validações / formato |
-| --- | --- | --- | --- |
-| `newStatus` | ReportStatus / string | Sim | `@NotNull`; valor exato do enum |
-| `note` | String / string ou null | Não | `@Size(max=2000)`; pode ser vazia; não retorna na response |
-
-```json
-{
-  "newStatus": "IN_ANALYSIS",
-  "note": "Análise iniciada."
-}
-```
-
-Todos os oito request DTOs acima são recebidos com `@Valid @RequestBody`. Não há validações customizadas, `@Min` ou `@Max` nesses contratos. `@NotBlank` rejeita null, vazio e apenas espaços; `@NotNull` rejeita null. `@Size`, `@Pattern` e `@Email` não tornam por si só um campo obrigatório. As mensagens de validação são retornadas por campo em `detalhes`; para várias violações no mesmo campo, o map conserva uma mensagem, sem ordem garantida.
-
-### Response DTOs
-
-#### LoginResponseDTO
-
-| Campo | Tipo Java / JSON | Presença / formato |
-| --- | --- | --- |
-| `token` | String / string | JWT gerado no login |
-| `name` | String / string | Nome do usuário |
-| `role` | String / string | `EMPLOYEE` ou `ADMIN`, sem `ROLE_` |
-| `passwordChanged` | boolean / boolean | Indica se houve troca/redefinição de senha |
-
-Exemplo completo na seção 3. Não retorna `id`, `cpf`, `active`, `contactEmail`, `expiresIn` ou refresh token.
-
-#### CategoryResponseDTO
-
-| Campo | Tipo Java / JSON | Presença / formato |
-| --- | --- | --- |
-| `id` | UUID / string | ID persistido |
-| `name` | String / string | Nome não nulo |
-| `active` | boolean / boolean | Estado da categoria |
+`CategoryResponseDTO`:
 
 ```json
 {
@@ -312,392 +234,341 @@ Exemplo completo na seção 3. Não retorna `id`, `cpf`, `active`, `contactEmail
 }
 ```
 
-#### ProtocolResponseDTO
+Nomes duplicados sem diferenciar maiúsculas/minúsculas retornam `400`.
 
-| Campo | Tipo Java / JSON | Presença / formato |
-| --- | --- | --- |
-| `protocol` | String / string | Protocolo gerado |
-| `trackingCode` | String / string | Código de 6 caracteres retornado somente na criação |
+### Paginação e categorias ativas
+
+`GET /api/categories` aceita:
+
+- `page`: padrão `0`, mínimo `0`;
+- `size`: padrão `20`, mínimo `1`, máximo `50`.
+
+A ordem é fixa por `name ASC`. A implementação atual usa `findByActiveTrue`: a listagem retorna somente categorias ativas.
+
+Ao criar uma denúncia, o backend consulta a categoria por ID e rejeita uma categoria inativa com `400` e `A categoria selecionada não está disponível.`. Portanto, não reutilize no formulário um ID de categoria antigo sem tratar essa resposta.
+
+Não existem endpoints atuais para obter uma categoria por ID, editar, ativar, desativar ou excluir categorias.
+
+## 7. Denúncias
+
+### Endpoints
+
+| Método | Endpoint | Acesso | Request | Sucesso |
+| --- | --- | --- | --- | --- |
+| `POST` | `/api/reports` | `EMPLOYEE` | `ReportRequestDTO` | `201 ProtocolResponseDTO` |
+| `GET` | `/api/reports/consult` | `EMPLOYEE` | Query `protocol`, `code` | `200 ReportResponseDTO` |
+| `POST` | `/api/reports/{protocol}/attachments` | `EMPLOYEE` | Multipart; seção 8 | `201`, sem corpo |
+| `GET` | `/api/reports/admin` | `ADMIN` | Query `page`, `size` | `200 Page<ReportResponseDTO>` |
+| `GET` | `/api/reports/admin/{protocol}` | `ADMIN` | Protocolo no path | `200 ReportAdminResponseDTO` |
+| `GET` | `/api/reports/admin/{protocol}/attachments/{attachmentId}` | `ADMIN` | Protocolo e UUID no path | `200`, binário |
+| `PATCH` | `/api/reports/admin/{protocol}/status` | `ADMIN` | `ReportStatusUpdateRequestDTO` | `200 ReportResponseDTO` |
+
+### Criação
+
+`ReportRequestDTO`:
 
 ```json
 {
-  "protocol": "DEN-2026-1234567",
-  "trackingCode": "ABC234"
+  "categoryId": "550e8400-e29b-41d4-a716-446655440000",
+  "description": "Descrição do ocorrido.",
+  "incidentDate": "2026-09-01",
+  "incidentLocation": "Unidade de exemplo"
 }
 ```
 
-#### ReportResponseDTO
+- `categoryId`: UUID obrigatório de categoria existente e ativa;
+- `description`: obrigatória, máximo 5000 caracteres;
+- `incidentDate`: opcional, `YYYY-MM-DD`, deve ser passada ou igual à data atual;
+- `incidentLocation`: opcional, máximo 255 caracteres.
 
-| Campo | Tipo Java / JSON | Presença / formato |
-| --- | --- | --- |
-| `protocol` | String / string | Não nulo |
-| `category` | String / string | Nome da categoria, não objeto/UUID |
-| `description` | String / string | Texto da denúncia, não nulo |
-| `status` | ReportStatus / string | Valor exato do enum |
-| `createdAt` | LocalDateTime / data-hora | Gerado na persistência; sem fuso; confirmar serialização efetiva |
+Response `201` — `ProtocolResponseDTO`:
 
 ```json
 {
-  "protocol": "DEN-2026-1234567",
+  "protocol": "DEN-2026-ABCD2345",
+  "trackingCode": "ABCD2345EF"
+}
+```
+
+O protocolo segue `DEN-<ano>-<8 caracteres>` e o código de rastreio possui 10 caracteres. Ambos usam o conjunto `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`. O `trackingCode` é retornado em texto somente na criação e armazenado como hash; o frontend deve exibi-lo para que o usuário o guarde e nunca registrá-lo em logs ou analytics. O status inicial é `RECEIVED`.
+
+### Consulta por protocolo + código
+
+`GET /api/reports/consult?protocol=<protocol>&code=<trackingCode>`.
+
+O nome do query parameter é `code`, não `trackingCode`. Ambos são obrigatórios e validados pelos formatos acima. Protocolo inexistente e código incorreto têm o mesmo `404`: `Protocolo ou código de acesso inválido.`.
+
+Response — `ReportResponseDTO`:
+
+```json
+{
+  "protocol": "DEN-2026-ABCD2345",
   "category": "Conduta interna",
-  "description": "Descrição fictícia do ocorrido.",
+  "description": "Descrição do ocorrido.",
   "status": "RECEIVED",
-  "createdAt": "2026-09-04T12:30:00"
+  "createdAt": "2026-09-10T10:30:00"
 }
 ```
 
-#### AttachmentResponseDTO
+`category` é o nome, não um objeto nem o ID. Esse DTO não inclui `incidentDate`, `incidentLocation`, anexos, histórico ou observações.
 
-Metadado de anexo exposto ao frontend dentro de `ReportAdminResponseDTO.attachments`:
+### Listagem e detalhe administrativos
 
-| Campo | Tipo Java / JSON | Presença / formato |
-| --- | --- | --- |
-| `id` | UUID / string | Identificador usado no endpoint administrativo de leitura do arquivo |
-| `originalFileName` | String / string | Nome original informado no upload |
-| `contentType` | String / string | MIME type registrado no upload |
-| `fileSize` | Long / number ou null | Tamanho em bytes; a coluna da entidade aceita null |
-| `createdAt` | LocalDateTime / data-hora | Data e hora de persistência, sem fuso |
+`GET /api/reports/admin` aceita:
 
-O DTO não expõe `storedFileName`, caminho físico, URL pública nem referência direta ao arquivo no servidor. Esses dados não devem ser inferidos ou montados pelo frontend.
+- `page`: padrão `0`, mínimo `0`;
+- `size`: padrão `10`, mínimo `1`, máximo `50`.
 
-#### ReportAdminResponseDTO
+A ordem é fixa por `createdAt DESC` (mais recentes primeiro). **O frontend não deve enviar parâmetro `sort` para `/api/reports/admin`**; o endpoint não declara esse parâmetro e a ordenação é definida no controller.
 
-Retornado exclusivamente pelo detalhe `GET /api/reports/admin/{protocol}`:
-
-| Campo | Tipo Java / JSON | Presença / formato |
-| --- | --- | --- |
-| `protocol` | String / string | Protocolo da denúncia |
-| `category` | String / string | Nome da categoria, não objeto/UUID |
-| `description` | String / string | Texto da denúncia |
-| `status` | ReportStatus / string | Valor exato do enum |
-| `incidentDate` | LocalDate / data ou null | Data informada para o ocorrido |
-| `incidentLocation` | String / string ou null | Local informado para o ocorrido |
-| `createdAt` | LocalDateTime / data-hora | Data e hora de criação, sem fuso |
-| `attachments` | List<AttachmentResponseDTO> / array | Metadados dos anexos associados; array vazio quando não houver registros |
+O detalhe `GET /api/reports/admin/{protocol}` retorna `ReportAdminResponseDTO`:
 
 ```json
 {
-  "protocol": "DEN-2026-1234567",
+  "protocol": "DEN-2026-ABCD2345",
   "category": "Conduta interna",
-  "description": "Descrição fictícia do ocorrido.",
-  "status": "RECEIVED",
-  "incidentDate": "2026-09-03",
-  "incidentLocation": "Unidade Salvador",
-  "createdAt": "2026-09-04T12:30:00",
-  "attachments": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440002",
-      "originalFileName": "comprovante.pdf",
-      "contentType": "application/pdf",
-      "fileSize": 245760,
-      "createdAt": "2026-09-04T12:35:00"
-    }
-  ]
+  "description": "Descrição do ocorrido.",
+  "status": "IN_ANALYSIS",
+  "incidentDate": "2026-09-01",
+  "incidentLocation": "Unidade de exemplo",
+  "createdAt": "2026-09-10T10:30:00",
+  "attachments": []
 }
 ```
 
-`AttachmentDownloadDTO` é usado apenas internamente entre service e controller para transportar o `Resource`, o nome original e o content type. O endpoint de arquivo não serializa esse DTO como JSON: seu corpo HTTP é o binário do anexo.
+`incidentDate` e `incidentLocation` podem ser `null`. `attachments` é uma lista de `AttachmentResponseDTO`, descrita na seção 8.
 
-#### UserResponseDTO
+### Atualização de status
 
-| Campo | Tipo Java / JSON | Presença / formato |
-| --- | --- | --- |
-| `id` | UUID / string | ID persistido |
-| `name` | String / string | Não nulo |
-| `cpf` | String / string | 11 dígitos; dado pessoal, preservar zeros iniciais |
-| `contactEmail` | String / string ou null | Opcional; pode não existir |
-| `role` | String / string | `EMPLOYEE` ou `ADMIN` |
-| `active` | boolean / boolean | Conta ativa ou desativada |
-| `passwordChanged` | boolean / boolean | Estado de troca de senha |
+Request — `ReportStatusUpdateRequestDTO`:
 
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440001",
-  "name": "Pessoa Exemplo",
-  "cpf": "00000000000",
-  "contactEmail": null,
-  "role": "EMPLOYEE",
-  "active": true,
-  "passwordChanged": false
+  "newStatus": "IN_ANALYSIS",
+  "note": "Análise iniciada."
 }
 ```
 
-Não há senha ou hash de senha em nenhuma response HTTP.
+- `newStatus`: obrigatório;
+- `note`: opcional, máximo 2000 caracteres.
 
-#### DTOs de erro
+Valores atuais e exatos de `ReportStatus`:
 
-Também fazem parte da comunicação HTTP, pelos handlers:
+- `RECEIVED`
+- `IN_ANALYSIS`
+- `UNDER_INVESTIGATION`
+- `AWAITING_ACTION`
+- `CLOSED`
+- `ARCHIVED`
 
-| DTO | Campos Java / JSON |
-| --- | --- |
-| `ErrorResponseDTO` | `status`: int/number; `erro`: String/string; `timestamp`: LocalDateTime, serialização dependente do mapper |
-| `ValidationErrorResponseDTO` | `status`: int/number; `detalhes`: Map<String,String>/objeto de mensagens por campo; `timestamp`: LocalDateTime |
+Não há matriz de transições no código: qualquer valor do enum pode substituir outro. Uma mudança efetiva registra histórico e auditoria; a `note` não é devolvida por endpoint. Se `newStatus` for igual ao status atual, o backend apenas devolve o relatório sem registrar a `note`.
 
-Os handlers preenchem os três campos. Exemplos e diferenças de serialização estão na seção 8.
+Não existem endpoints atuais para excluir denúncia, editar seus dados, listar “minhas denúncias”, consultar histórico ou comentários, nem filtrar a listagem administrativa por status ou texto.
 
-## 6. Enums
+## 8. Anexos
 
-### Role
+### Upload do `EMPLOYEE`
 
-Valores exatos: `EMPLOYEE`, `ADMIN`.
+`POST /api/reports/{protocol}/attachments`, com `Content-Type: multipart/form-data`.
 
-Usado para autorização e retornado como String em `LoginResponseDTO.role` e `UserResponseDTO.role`. Cadastro via API fixa `EMPLOYEE`. A criação inicial de ADMIN ocorre na inicialização do backend, fora de endpoint. Não há campo de role em request.
+Parâmetros exatos:
 
-### ReportStatus
+- path `protocol`: formato `DEN-<ano>-<8 caracteres permitidos>`;
+- parte textual `trackingCode`: obrigatória, 10 caracteres permitidos;
+- partes `files`: uma ou mais; para vários arquivos, repetir a chave `files` no `FormData`.
 
-Valores exatos, na ordem do Java:
+O `trackingCode` vai no multipart, não na query string. Deixe o navegador definir o boundary do `Content-Type`.
 
-```text
-RECEIVED
-IN_ANALYSIS
-UNDER_INVESTIGATION
-AWAITING_ACTION
-CLOSED
-ARCHIVED
+Tipos permitidos, validados pela assinatura real do conteúdo:
+
+- PDF: `application/pdf`, extensão `.pdf`;
+- JPEG: `image/jpeg`, extensões `.jpg`, `.jpeg` ou `.jfif`;
+- PNG: `image/png`, extensão `.png`.
+
+Se o nome tiver extensão, ela deve corresponder ao conteúdo detectado. Arquivo vazio é rejeitado.
+
+Limites atuais:
+
+- máximo por arquivo: `10 MB`;
+- máximo de anexos acumulados por denúncia: `5`;
+- máximo acumulado por denúncia: `25 MiB` (`25 * 1024 * 1024` bytes);
+- máximo configurado para toda a requisição multipart: `26 MB`, incluindo o envelope multipart.
+
+Os limites de quantidade e total consideram anexos já existentes. O sucesso retorna `201` sem corpo. Protocolo inexistente ou `trackingCode` incorreto retornam o mesmo `404`: `Denúncia ou código de acesso inválido.`.
+
+### Storage privado e download administrativo
+
+Os arquivos são armazenados em bucket privado do Supabase. O frontend não recebe URL pública, nome interno nem credencial do Supabase e **não deve acessar o Supabase diretamente**.
+
+O detalhe administrativo retorna apenas estes metadados em cada `AttachmentResponseDTO`:
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "originalFileName": "comprovante.pdf",
+  "contentType": "application/pdf",
+  "fileSize": 123456,
+  "createdAt": "2026-09-10T10:35:00"
+}
 ```
 
-Usado em `ReportStatusUpdateRequestDTO.newStatus`, `ReportResponseDTO.status` e `ReportAdminResponseDTO.status`. Inicial: `RECEIVED`. O código não define descrições formais, etapas obrigatórias nem regras de transição; rótulos em português são apresentação do frontend e não devem substituir os valores enviados. O valor real é `UNDER_INVESTIGATION`, com essa grafia.
+O download deve ser feito por `GET /api/reports/admin/{protocol}/attachments/{attachmentId}`, com JWT de `ADMIN` no header `Authorization`. A resposta é binária, com `Content-Type`, `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff` e cache desabilitado (`no-store`). Consuma como `Blob` e use o nome recebido no `Content-Disposition` ou em `originalFileName`.
 
-## 7. Paginação
+Não existem endpoints atuais para listar anexos separadamente, excluir ou editar anexos.
 
-| Endpoint | Tipo retornado | Defaults explícitos no controller |
-| --- | --- | --- |
-| GET `/api/categories` | `Page<CategoryResponseDTO>` | `Pageable` sem `@PageableDefault`; page/size/sort não fixados pelo projeto |
-| GET `/api/reports/admin` | `Page<ReportResponseDTO>` | `page=0`, `size=10`; ordenação fixa por `createdAt` DESC |
-| GET `/api/users` | `Page<UserResponseDTO>` | `size=20`, `sort=name`; page e direção não explicitadas |
+## 9. Recuperação de senha
 
-Nos endpoints que recebem `Pageable`, a convenção do resolver Spring Data usa página inicial 0 e parâmetros `page`, `size`, `sort`; `sort=campo,asc` ou `sort=campo,desc`, podendo repetir `sort`. Sem override do framework, os defaults usuais são page 0, size 20 e sem ordenação para `Pageable` simples, e direção ASC para `@PageableDefault`. Estes defaults de framework não estão definidos integralmente em código local; confirmar em runtime ou enviar parâmetros explicitamente. Não há configuração local de limite máximo de página. A listagem de denúncias é a exceção: o controller recebe apenas `page` e `size` e monta diretamente um `PageRequest` com `createdAt` DESC; não enviar `sort` esperando alterar essa ordenação.
+### Solicitar recuperação
 
-Exemplos de consumo explícito:
+`POST /api/auth/forgot-password` é público.
 
-- `/api/categories?page=0&size=20&sort=name,asc`
-- `/api/reports/admin?page=0&size=10`
-- `/api/users?page=0&size=20&sort=name,asc`
+Request — `ForgotPasswordRequestDTO`:
 
-Não há whitelist de sort nos endpoints que aceitam esse parâmetro. Use propriedades conhecidas da entidade consultada e não suponha que todo campo visual possa ser usado para ordenar.
+```json
+{
+  "cpf": "00000000000"
+}
+```
 
-**A estrutura exata de serialização de Page<T> deve ser confirmada em runtime.** O projeto retorna `Page<T>` diretamente, sem envelope próprio. Não há exemplo fictício de envelope neste documento. O frontend precisará identificar no retorno real o conteúdo, página, tamanho, total de elementos/páginas e indicadores de navegação, sem tratar nomes presumidos como contrato confirmado. Os itens são exatamente os DTOs indicados.
+`cpf` é obrigatório e deve conter exatamente 11 dígitos.
 
-## 8. Tratamento de erros
+O sucesso é sempre `200` sem corpo. Para evitar enumeração de usuários, o backend também retorna `200` sem corpo quando o CPF não existe, a conta está inativa, não há e-mail de contato ou o limite interno por conta foi atingido. O frontend deve sempre mostrar uma mensagem neutra, como “Se os dados estiverem aptos, você receberá as instruções”. Falha real no envio do provedor pode resultar em `500`.
 
-`GlobalExceptionHandler` é `@RestControllerAdvice`. Existem dois formatos, sem envelope comum adicional.
+Quando aplicável, um novo pedido remove tokens anteriores daquele usuário. O e-mail aponta para `<FRONTEND_BASE_URL>/reset-password?token=...`.
 
-Exemplo de erro de negócio, com timestamp ilustrado como ISO:
+### Redefinir senha
+
+`POST /api/auth/reset-password` é público.
+
+Request — `ResetPasswordRequestDTO`:
+
+```json
+{
+  "token": "<TOKEN_BASE64URL_DE_43_CARACTERES>",
+  "newPassword": "NovaSenha"
+}
+```
+
+- `token`: obrigatório, exatamente 43 caracteres Base64 URL-safe (`A-Z`, `a-z`, `0-9`, `_`, `-`);
+- `newPassword`: obrigatória, entre 6 e 100 caracteres e diferente da senha atual.
+
+O token é válido por 1 hora, é armazenado somente como hash e só pode concluir uma redefinição. Token inexistente, usado ou expirado retorna `400` com `Token inválido ou expirado.`. Conta inativa retorna `400` com `Não foi possível redefinir a senha.`.
+
+O sucesso é `200` sem corpo, define `passwordChanged=true`, remove os tokens de recuperação do usuário e invalida JWTs emitidos anteriormente. O endpoint não retorna um novo JWT; encaminhe ao login.
+
+## 10. Rate limiting
+
+A API aplica rate limiting a operações sensíveis de autenticação, recuperação, criação/consulta de denúncias e upload/download de anexos. Ela pode responder `429 Too Many Requests`.
+
+O frontend deve:
+
+- exibir mensagem adequada e evitar retries automáticos agressivos;
+- respeitar o header `Retry-After` quando ele estiver presente;
+- preservar o formulário para o usuário tentar novamente depois;
+- não expor detalhes internos do mecanismo de limitação.
+
+O formato do body segue `ErrorResponseDTO`; a mensagem usual do filtro é `Muitas tentativas. Aguarde antes de tentar novamente.`.
+
+## 11. Erros
+
+### Erro comum
+
+`ErrorResponseDTO`:
 
 ```json
 {
   "status": 400,
-  "erro": "CPF já cadastrado no sistema.",
-  "timestamp": "2026-09-04T12:30:00"
+  "erro": "Mensagem do erro.",
+  "timestamp": "2026-09-10T10:30:00"
 }
 ```
 
-Exemplo de Jakarta Validation:
+### Erros de validação de body
+
+`ValidationErrorResponseDTO`:
 
 ```json
 {
   "status": 400,
   "detalhes": {
-    "description": "A descrição da denúncia não pode estar vazia.",
-    "categoryId": "A categoria da denúncia é obrigatória."
+    "cpf": "O CPF deve conter exatamente 11 dígitos numéricos.",
+    "password": "A senha não pode estar vazia."
   },
-  "timestamp": "2026-09-04T12:30:00"
+  "timestamp": "2026-09-10T10:30:00"
 }
 ```
 
-`detalhes` não se chama `errors`, e `erro` não se chama `message`. O erro de validação não inclui `erro`.
+`detalhes` é um mapa `campo -> mensagem`. Validações de parâmetros de path/query retornam o formato comum com mensagem genérica de parâmetros inválidos.
 
-| HTTP | Origem / cenários confirmados no código | Mensagem / formato |
-| --- | --- | --- |
-| 400 | `BusinessRuleException` | `ErrorResponseDTO` com mensagem da exceção |
-| 400 | `MethodArgumentNotValidException` | `ValidationErrorResponseDTO`, mensagens por campo |
-| 401 | `BadCredentialsException` no login | `erro`: `CPF ou senha inválidos` |
-| 401 | AuthenticationEntryPoint | `erro`: `Token ausente ou inválido` |
-| 401 | `ExpiredJwtException` no filtro | `erro`: `Sessão expirada. Faça login novamente.` |
-| 401 | `JwtException` no filtro | `erro`: `Token de acesso inválido ou malformado.` |
-| 401 | `UsernameNotFoundException` no filtro | `erro`: `Usuário desativado ou não encontrado.`; a busca em si não filtra active |
-| 403 | AccessDeniedHandler | `erro`: `Você não tem permissão para acessar este recurso` |
-| 404 | `ResourceNotFoundException` | `ErrorResponseDTO` com mensagem da exceção |
-| 409 | `DataIntegrityViolationException` | `erro`: `Conflito de dados: O registro que você tentou inserir já existe ou viola uma restrição no banco de dados.` |
-| 500 | Handler genérico de Exception | `erro`: `Ocorreu um erro interno no servidor. Tente novamente mais tarde.` |
-| 500 | Catch genérico no filtro JWT | `erro`: `Erro interno de autenticação.` |
+### Status aplicáveis
 
-Mensagens de negócio relevantes:
-
-- CPF repetido no cadastro: `CPF já cadastrado no sistema.` (400, não 409 na verificação prévia).
-- Troca de senha: `A senha atual está incorreta.` ou `A nova senha não pode ser igual à senha provisória.` (400).
-- Recuperação sem e-mail: `Este usuário não possui um e-mail de contato cadastrado para recuperação.` (400).
-- Reset usado: `Este link de recuperação já foi utilizado.` (400).
-- Reset expirado: `O link de recuperação expirou. Solicite um novo.` (400).
-- Reset desconhecido: `Token inválido ou não encontrado.` (404).
-- Usuário inexistente: `Usuário não encontrado.` (404).
-- Categoria inexistente: `Categoria não encontrada.` (404).
-- Consulta com protocolo inexistente: `Protocolo não encontrado.` (404).
-- Consulta com código incorreto: `Protocolo ou código de acesso inválido.` (404).
-- Upload com código incorreto: `Código de rastreio inválido para este protocolo.` (400).
-- Upload, detalhe administrativo ou alteração de status com protocolo inexistente: `Denúncia não encontrada com o protocolo: <protocol>` (404).
-- Download com `attachmentId` inexistente ou que não pertença ao `protocol` informado: `Anexo não encontrado.` (404).
-
-Não há handlers específicos para JSON malformado, enum/UUID/data inválidos, parâmetros obrigatórios ausentes, `IllegalArgumentException`, `DisabledException` ou tamanho multipart excedido. Exceções que alcançam o advice genérico podem produzir 500, mesmo sendo problemas de entrada. Falhas anteriores ao MVC, no container ou no processamento multipart podem ter tratamento diferente; confirmar status e body em runtime, sem assumir 400/413 padronizados.
-
-**Timestamp do filtro:** `JWTAuthenticationFilter` cria seu próprio `com.fasterxml.jackson.databind.ObjectMapper` e registra `JavaTimeModule`, sem desabilitar timestamps. Assim, não há garantia de string ISO nessa origem; pode serializar `LocalDateTime` como array numérico. `SecurityConfig` usa `tools.jackson.databind.ObjectMapper` injetado. Confirmar os formatos reais das três origens (MVC, handlers Security e filtro); não fazer a interface depender do parsing de `timestamp` para apresentar um erro.
-
-## 9. CORS
-
-`CorsConfig` é aplicado a `/**` e habilitado na cadeia Security.
-
-| Configuração | Valor |
+| Status | Uso atual |
 | --- | --- |
-| Origins | `http://localhost:5173`, `https://reporting.mbfreire.local` |
-| Métodos | `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS` |
-| Headers permitidos | `*`, incluindo Authorization e Content-Type |
-| Credentials | `true` |
-| Headers expostos | Não configurados explicitamente |
-| Max age | Não configurado explicitamente |
+| `400` | Validação, JSON malformado, parâmetro ausente/inválido e regras de negócio |
+| `401` | Login inválido; Bearer ausente, inválido, expirado ou invalidado; usuário desativado/não encontrado |
+| `403` | Role sem permissão ou bloqueio de primeiro acesso |
+| `404` | Usuário, categoria, denúncia/anexo não encontrado; protocolo + código inválido |
+| `409` | Violação de integridade/restrição no banco |
+| `413` | Requisição multipart acima do limite configurado |
+| `429` | Limite de requisições excedido |
+| `500` | Falha interna não tratada, autenticação interna ou dependência externa |
 
-Para desenvolvimento local no navegador, usar origem `http://localhost:5173`. `http://127.0.0.1:5173`, outras portas ou HTTPS localhost não estão na lista. A liberação de PUT/DELETE por CORS não cria endpoints desses métodos. JWT é enviado no header; o backend não implementa autenticação por cookie, e `allowCredentials=true` não obriga `withCredentials` para o Bearer.
+Mensagens de segurança que o frontend deve reconhecer:
 
-## 10. Anexos: upload do funcionário e leitura administrativa
+- `401`: `CPF ou senha inválidos.`, `Token ausente, inválido ou expirado`, `Sessão expirada. Faça login novamente.`, `Token de acesso inválido.`, `Token de acesso inválido ou malformado.`, `Usuário desativado ou não autorizado.` ou `Usuário desativado ou não encontrado.`;
+- `403` por role: `Você não tem permissão para acessar este recurso`;
+- `403` por primeiro acesso: `É necessário alterar a senha provisória antes de utilizar o sistema.`;
+- `413`: `O arquivo enviado excede o tamanho máximo permitido.`;
+- `429`: mensagem de excesso de tentativas;
+- `500` genérico: `Ocorreu um erro interno no servidor. Tente novamente mais tarde.`.
 
-### Upload do EMPLOYEE
+Não faça a interface depender do texto exato para decidir o fluxo quando o status e o estado local forem suficientes. `timestamp` é um `LocalDateTime` sem indicação de fuso horário.
 
-- Endpoint: `POST /api/reports/{protocol}/attachments`, exclusivamente com JWT de `EMPLOYEE`. Uma conta `ADMIN` não possui autorização para esse endpoint.
-- Path: **`protocol`** identifica a denúncia. Body: `multipart/form-data`; campo textual obrigatório **`trackingCode`** (String, código retornado na criação) e campo **`files`**, mapeado para `List<MultipartFile>`. Para vários arquivos, repetir `files` no `FormData`. Ambos são `@RequestParam`; enviar o código no FormData evita colocá-lo na URL. Não há `@NotBlank` no parâmetro, mas o service compara seu valor com o hash BCrypt.
-- MIME types aceitos: `image/jpeg`, `image/png`, `application/pdf`. A checagem usa o Content-Type informado no arquivo; não há inspeção de conteúdo implementada.
-- Configuração de armazenamento: **`file.upload-dir=uploads/attachments`**. O valor é relativo ao diretório de execução e normalizado para caminho absoluto; o construtor também declara `uploads/attachments` como fallback.
-- Limites configurados: **`spring.servlet.multipart.max-file-size=10MB`** por arquivo e **`spring.servlet.multipart.max-request-size=10MB`** para a requisição inteira. Vários arquivos compartilham o limite total, incluindo o envelope multipart.
-- Não há limite explícito de quantidade no service. Lista vazia e arquivo vazio são rejeitados.
-- Sucesso: 201 sem corpo, sem IDs, nomes ou URLs retornados.
-- O upload exige protocolo e `trackingCode` válido, além de autenticação. Código incorreto retorna 400 com `erro`: `Código de rastreio inválido para este protocolo.`. Não há checagem de autor nem restrição por status da denúncia. Na consulta o parâmetro se chama `code`; no upload, `trackingCode`.
-- O nome interno é gerado com UUID e extensão. Ele e o caminho físico são detalhes privados do servidor, não URLs públicas e não aparecem no `AttachmentResponseDTO`.
+## 12. CORS e ambientes
 
-Rejeições internas de arquivo lançam `IllegalArgumentException`: `Nenhum arquivo foi enviado.`, `Não é possível enviar um arquivo vazio.` e `Tipo de arquivo não permitido. Apenas PDF, JPEG e PNG são aceitos.`. Como não há handler específico, essas mensagens não são garantidas no body HTTP; o advice genérico retorna 500 com mensagem genérica. Falha de escrita também gera exceção genérica. Validar MIME e tamanho no frontend melhora a experiência, mas não substitui a validação do servidor.
+- Desenvolvimento permite a origem `http://localhost:5173`.
+- Staging e produção obtêm a URL do frontend por `FRONTEND_BASE_URL`; ela alimenta tanto o CORS quanto o link de recuperação de senha.
+- Métodos CORS permitidos: `GET`, `POST`, `PATCH`, `OPTIONS`.
+- Headers de request permitidos: `Authorization`, `Content-Type`, `Accept`.
+- `allowCredentials=false`; a autenticação não usa cookies.
+- `Content-Disposition` é exposto ao navegador para download de anexos.
+- Swagger/OpenAPI está ativo em `dev` e `staging` e desativado em `prod`. Quando ativo, usa os caminhos padrão `/swagger-ui/**` e `/v3/api-docs/**` fora de `/api`.
 
-Se um arquivo de um lote falhar, não há compensação dos arquivos já escritos em disco. Não assumir sucesso parcial identificável nem reenviar automaticamente todo o lote: a API não retorna quais arquivos foram gravados.
+Não coloque no frontend nem neste documento valores de JWT secret, credenciais de banco, chaves de e-mail ou chaves/bucket do Supabase.
 
-### Detalhe e download do ADMIN
+## 13. Frontend Integration Rules
 
-- Para obter a denúncia e a lista de anexos, enviar `GET /api/reports/admin/{protocol}` com JWT de `ADMIN` no header `Authorization: Bearer <TOKEN>`. A resposta JSON é `ReportAdminResponseDTO`; `attachments` contém itens `AttachmentResponseDTO`.
-- Para ler um arquivo, enviar `GET /api/reports/admin/{protocol}/attachments/{attachmentId}`, também com Bearer token de `ADMIN`. O `attachmentId` vem de `attachments` no detalhe administrativo.
-- O retorno do download é o corpo binário do arquivo como `Resource`, não JSON. O controller aplica o `Content-Type` original salvo no upload e `Content-Disposition: inline` com `filename` baseado em `originalFileName`, codificado em UTF-8.
-- A consulta `findByIdAndReportProtocol(attachmentId, protocol)` valida conjuntamente o ID e o protocolo. Se o anexo não existir ou pertencer a outra denúncia, o backend responde 404 com `Anexo não encontrado.`.
-- O arquivo físico é carregado somente pelo backend a partir do nome interno persistido; `FileStorageService` normaliza o caminho e rejeita resolução fora de `file.upload-dir`.
-- Não há endpoint de exclusão ou edição de anexos. A listagem disponível é apenas o array `attachments` do detalhe administrativo; não existe endpoint separado para listar anexos.
+- Use a URL base da API por variável de ambiente: local `http://localhost:8080/api`; online `https://employee-reporting-api-v9fh.onrender.com/api`.
+- Envie JWT exclusivamente como `Authorization: Bearer <token>`; não use cookies.
+- Respeite `passwordChanged`: com `false`, permita apenas perfil e troca de senha, além das rotas públicas; após a troca, descarte o JWT invalidado e peça novo login.
+- Separe rigorosamente as interfaces por role: `ADMIN` não denuncia; `EMPLOYEE` não acessa a administração.
+- Não envie `sort` em `GET /api/reports/admin`; a ordem é sempre `createdAt DESC`.
+- Não acesse Supabase diretamente e não construa URLs públicas de anexos. Faça o download administrativo pela API Spring autenticada.
+- Trate explicitamente `401`, `403`, `413` e `429`; em `429`, respeite `Retry-After` quando presente.
+- Nunca coloque CPF, JWT, senha, token de recuperação ou tracking code em logs, analytics ou mensagens de erro de cliente.
+- Preserve CPF como string de 11 dígitos e não aplique conversão numérica.
+- Não presuma endpoints, filtros, campos, enums, histórico, comentários ou operações que não existam neste documento.
 
-Exemplo esquemático da resposta de arquivo (o valor exato de `Content-Disposition` é formatado pelo Spring conforme o nome):
+## Referência rápida de endpoints
 
-```http
-HTTP/1.1 200 OK
-Content-Type: application/pdf
-Content-Disposition: inline; filename=<nome-original-em-UTF-8>
-
-<conteúdo binário do arquivo>
-```
-
-## 11. Fluxos principais
-
-### Login
-
-Enviar CPF sem máscara e senha a `/auth/login`. Usar `token` no header das próximas chamadas e `role` para a interface. `/users/me` fornece o perfil completo. Centralizar 401 para encerrar a sessão local e solicitar novo login; em 403, informar falta de permissão sem loop de relogin.
-
-### Primeiro acesso / troca de senha
-
-Ao receber `passwordChanged=false`, o frontend pode encaminhar para troca de senha. Enviar `currentPassword` e `newPassword` em PATCH `/users/me/password`. Em 204, atualizar o perfil via `/users/me` ou ajustar o estado local. A flag fica true. Esse encaminhamento é política de interface: o backend não força a troca antes de outras operações.
-
-### Recuperação de senha
-
-Enviar CPF a POST `/auth/forgot-password`. O usuário deve possuir `contactEmail` não vazio. O backend cria token UUID, válido por uma hora, e envia e-mail via Brevo. A API responde 200 sem revelar o token. CPF não encontrado retorna 404, portanto o comportamento atual não oculta a existência de contas.
-
-O link montado em `EmailService` é fixo: `http://localhost:5173/reset-password?token=<token>`. A página é responsabilidade do frontend; não é rota REST do backend. Ler o token da query e enviar `token` e `newPassword` a POST `/auth/reset-password`. Em 200, encaminhar ao login; não há JWT na resposta.
-
-Reset marca o token como usado e `passwordChanged=true`. Token usado é verificado antes de expiração. Novo pedido não invalida tokens anteriores; não há verificação de `active` nesses serviços. O reset não impede reutilizar a senha atual. Envio/entrega de e-mail dependem da configuração e disponibilidade do provedor; não há endpoint para cadastrar/editar e-mail de contato depois do cadastro.
-
-### Criação de denúncia
-
-O fluxo de criação de denúncia é exclusivo de uma conta `EMPLOYEE`. Autenticar como `EMPLOYEE`, carregar categorias paginadas e enviar `ReportRequestDTO` em POST `/reports`. Uma conta `ADMIN` recebe 403 nesse endpoint e não deve ser direcionada pelo frontend a esse fluxo. Embora a interface possa mostrar apenas categorias ativas, o backend não rejeita categoria inativa. Em 201, exibir claramente **protocol e trackingCode** e oferecer copiar/salvar. O código só é devolvido nessa criação e deve ser tratado como informação sensível de acesso: não registrar em logs nem enviar a serviços externos.
-
-### Consulta por protocolo
-
-Com uma conta `EMPLOYEE` autenticada, solicitar protocolo e código e enviar GET `/reports/consult` com `protocol` e `code`. Uma conta `ADMIN` recebe 403 e deve consultar denúncias somente pelas rotas administrativas. Exibir os cinco campos de `ReportResponseDTO`. Tratar 404 tanto para protocolo inexistente como código incorreto. Não há recuperação do tracking code ou consulta somente por protocolo.
-
-### Upload de anexos
-
-Com a mesma conta `EMPLOYEE` usada no fluxo de funcionário, após criar a denúncia, montar `FormData` com o campo textual `trackingCode` e uma ou mais partes `files`, e enviar a POST `/reports/{protocol}/attachments`, usando o protocolo no path. Uma conta `ADMIN` recebe 403 nesse endpoint. Deixar navegador/cliente gerar Content-Type com boundary; não enviar JSON. Tratar 201 sem parsing de body.
-
-### Fluxo administrativo
-
-`ADMIN` acessa denúncias exclusivamente pelas rotas administrativas. Listar em GET `/reports/admin`; ao abrir uma denúncia, buscar o detalhe em GET `/reports/admin/{protocol}` e usar diretamente o array `attachments` retornado. Para abrir um item, consumir GET `/reports/admin/{protocol}/attachments/{attachmentId}` como **blob autenticado**, enviando o Bearer token, e criar a visualização/download no cliente a partir dessa resposta binária.
-
-Não construir caminho ou URL de arquivo manualmente, não usar nem tentar inferir `storedFileName` e não apontar o navegador diretamente para `file.upload-dir`. O frontend deve combinar somente o `protocol` atual e o `id` recebido em `attachments` no endpoint administrativo documentado. Não inventar ações de exclusão ou edição de anexos, pois elas não existem no backend.
-
-A alteração de status continua em `/reports/admin/{protocol}/status`, com observação opcional. A resposta atualiza a denúncia, mas não fornece histórico ou note. A conta `ADMIN` não pode criar denúncias, enviar anexos nem consultar por protocolo + código. Caso uma pessoa do RH precise usar essas funções como funcionária, deve autenticar-se com uma conta `EMPLOYEE` separada.
-
-`ADMIN` também cadastra `EMPLOYEE` em `/auth/register`, lista/consulta usuários e ativa/desativa contas. Tanto `EMPLOYEE` quanto `ADMIN` podem listar categorias com GET `/categories`; somente `ADMIN` pode criá-las com POST `/categories`.
-
-### Regras de autorização para o frontend
-
-- Exibir e permitir acesso às ações de criar denúncia, enviar anexos e consultar por protocolo + código somente para sessões com role `EMPLOYEE`.
-- Não apresentar essas ações como disponíveis a uma sessão `ADMIN` e não usar a conta administrativa como alternativa para chamar os endpoints de funcionário.
-- Direcionar a experiência de denúncias da sessão `ADMIN` exclusivamente às rotas e telas administrativas; ao abrir o detalhe, chamar GET `/reports/admin/{protocol}` e renderizar seus oito campos, incluindo `attachments`.
-- Abrir anexos administrativos por GET `/reports/admin/{protocol}/attachments/{attachmentId}` como blob autenticado. Usar o `id` e `originalFileName` fornecidos por `AttachmentResponseDTO`; nunca `storedFileName` ou um caminho montado manualmente.
-- Não exibir controles de edição ou exclusão de anexos, pois não há endpoints correspondentes.
-- Se uma pessoa possuir responsabilidades de RH e também precisar denunciar como funcionária, tratar as contas `ADMIN` e `EMPLOYEE` como sessões separadas; não tentar alternar a role no frontend.
-- Permitir a listagem de categorias para `EMPLOYEE` e `ADMIN`, mas restringir a criação de categorias a `ADMIN`.
-- Manter guards visuais no frontend para a experiência correta, sem tratá-los como substitutos da autorização aplicada pelo backend.
-
-## 12. Pontos de atenção e cuidados de integração
-
-### Limitações relevantes do backend atual
-
-- Criação, acompanhamento e upload de denúncias exigem login apesar do contexto de denúncias anônimas.
-- Criação de categoria exige `ADMIN`; listagem aceita `EMPLOYEE` e `ADMIN` e inclui categorias inativas, que também são aceitas na criação de denúncia.
-- Criação de denúncia, consulta por protocolo + código e upload de anexos exigem `EMPLOYEE`. Uma conta `ADMIN` recebe 403 nessas rotas e acessa denúncias somente por `/reports/admin/**`.
-- `ReportAdminResponseDTO` é retornado por GET `/reports/admin/{protocol}` e contém `protocol`, `category`, `description`, `status`, `incidentDate`, `incidentLocation`, `createdAt` e `attachments`. A listagem administrativa e a alteração de status continuam retornando `ReportResponseDTO`.
-- `incidentDate` e `incidentLocation` são aceitos, persistidos e retornados no detalhe administrativo; continuam ausentes de `ReportResponseDTO`.
-- `StatusHistory` e `AuditLog` são gravados na alteração efetiva de status, mas não têm endpoints REST de consulta. `note` não pode ser recuperada via API. Não há comentários.
-- O upload de anexos permanece exclusivo de `EMPLOYEE` e exige protocolo, trackingCode e autenticação. O detalhe e o download são exclusivos de `ADMIN`; não há edição nem exclusão de anexos.
-- `passwordChanged=false` não restringe a API. Desativação não bloqueia o caminho de autenticação por JWT já emitido. Troca/reset não revogam JWTs.
-- Erros de entrada não cobertos por handlers específicos podem virar 500. Não assumir que todos os erros de cliente serão 400.
-- Recuperação depende de e-mail previamente cadastrado e usa link fixo em localhost. Não há endpoint de edição desse e-mail.
-- Formato de `Page<T>`, datas/timestamps, defaults efetivos do resolver de paginação, falhas multipart, resposta de usuário desativado, CORS em execução e disponibilidade do Swagger precisam de confirmação em runtime.
-- Os exemplos de datas usam ISO para orientar integração, mas os mappers diferentes, especialmente no filtro JWT, impedem garantir um formato único de timestamp somente pelo código.
-
-### Recomendações para o cliente HTTP
-
-Configurar uma instância Axios ou wrapper de fetch com base `http://localhost:8080/api`, tratamento centralizado de erros e inclusão de Bearer apenas quando necessário. Nas rotas públicas de autenticação/recuperação, evitar anexar um token antigo. Não existe renovação automática de sessão no backend.
-
-Enviar `application/json` em requests JSON e `FormData` no upload, deixando o boundary para o navegador. Distinguir respostas vazias de responses JSON e manter uma alternativa de mensagem caso a infraestrutura devolva body fora dos DTOs de erro. Respeitar validações, campos nullable, enums e paginação; não enviar campos extras, inclusive confirmação de senha.
-
-Nunca logar JWT, senha, token de recuperação ou tracking code. A estratégia de armazenamento de JWT pertence ao frontend; o backend não define uma. Senhas só devem existir temporariamente no estado do formulário, nunca em localStorage/sessionStorage ou persistência. Limpar esses estados ao finalizar o fluxo. Não expor secrets do backend. Preservar CPF como string e tratar datas sem inventar timezone.
-
-### Referências do código e revisão
-
-Contrato baseado nos quatro arquivos de `controller`, oito records de `dto/request`, responses efetivamente usados em `dto/response`, `enums/Role.java`, `enums/ReportStatus.java`, `config/SecurityConfig.java`, `config/CorsConfig.java`, `config/OpenApiConfig.java`, classes de `security`, `exception/GlobalExceptionHandler.java` e configurações de `src/main/resources/application.properties`. Para anexos administrativos, a revisão também confirmou diretamente `ReportController`, `ReportService`, `FileStorageService`, `AttachmentRepository`, `Attachment`, `ReportAdminResponseDTO`, `AttachmentResponseDTO` e `AttachmentDownloadDTO`.
-
-A revisão confrontou os 19 mappings, nomes dos DTOs/campos, enums, regras Security, validações e exemplos JSON com o código. Não houve execução de chamadas HTTP; os pontos de runtime acima permanecem pendentes.
-
-## 13. Tabela final de endpoints
-
-Todos os endpoints de negócio encontrados nos controllers estão abaixo. O host local é `http://localhost:8080`. Swagger/OpenAPI é fornecido pela dependência, não pelos quatro controllers de negócio.
-
-| Método | Endpoint | Auth | Role | Descrição |
-| --- | --- | --- | --- | --- |
-| POST | `/api/auth/login` | Não | Pública | Autenticar por CPF e senha |
-| POST | `/api/auth/register` | Sim | ADMIN | Cadastrar EMPLOYEE |
-| POST | `/api/auth/forgot-password` | Não | Pública | Solicitar recuperação por e-mail |
-| POST | `/api/auth/reset-password` | Não | Pública | Redefinir senha usando token |
-| POST | `/api/categories` | Sim | ADMIN | Criar categoria |
-| GET | `/api/categories` | Sim | EMPLOYEE ou ADMIN | Listar categorias paginadas |
-| POST | `/api/reports` | Sim | EMPLOYEE | Criar denúncia e obter protocolo/código |
-| POST | `/api/reports/{protocol}/attachments` | Sim | EMPLOYEE | Enviar anexos |
-| GET | `/api/reports/consult` | Sim | EMPLOYEE | Consultar com protocol e code |
-| GET | `/api/reports/admin` | Sim | ADMIN | Listar denúncias paginadas |
-| GET | `/api/reports/admin/{protocol}` | Sim | ADMIN | Obter detalhe da denúncia com attachments |
-| GET | `/api/reports/admin/{protocol}/attachments/{attachmentId}` | Sim | ADMIN | Retornar o binário de um anexo pertencente à denúncia |
-| PATCH | `/api/reports/admin/{protocol}/status` | Sim | ADMIN | Alterar status |
-| GET | `/api/users/me` | Sim | Qualquer autenticado | Consultar próprio perfil |
-| GET | `/api/users` | Sim | ADMIN | Listar usuários paginados |
-| GET | `/api/users/{id}` | Sim | ADMIN | Consultar usuário por UUID |
-| PATCH | `/api/users/me/password` | Sim | Qualquer autenticado | Trocar própria senha |
-| PATCH | `/api/users/{id}/deactivate` | Sim | ADMIN | Desativar usuário |
-| PATCH | `/api/users/{id}/activate` | Sim | ADMIN | Ativar usuário |
+| Método | Endpoint | Acesso |
+| --- | --- | --- |
+| `POST` | `/api/auth/login` | Público |
+| `POST` | `/api/auth/register` | `ADMIN` |
+| `POST` | `/api/auth/forgot-password` | Público |
+| `POST` | `/api/auth/reset-password` | Público |
+| `GET` | `/api/users/me` | Autenticado |
+| `PATCH` | `/api/users/me/password` | Autenticado |
+| `GET` | `/api/users` | `ADMIN` |
+| `GET` | `/api/users/{id}` | `ADMIN` |
+| `PATCH` | `/api/users/{id}/deactivate` | `ADMIN` |
+| `PATCH` | `/api/users/{id}/activate` | `ADMIN` |
+| `GET` | `/api/categories` | `EMPLOYEE` ou `ADMIN` |
+| `POST` | `/api/categories` | `ADMIN` |
+| `POST` | `/api/reports` | `EMPLOYEE` |
+| `GET` | `/api/reports/consult` | `EMPLOYEE` |
+| `POST` | `/api/reports/{protocol}/attachments` | `EMPLOYEE` |
+| `GET` | `/api/reports/admin` | `ADMIN` |
+| `GET` | `/api/reports/admin/{protocol}` | `ADMIN` |
+| `GET` | `/api/reports/admin/{protocol}/attachments/{attachmentId}` | `ADMIN` |
+| `PATCH` | `/api/reports/admin/{protocol}/status` | `ADMIN` |

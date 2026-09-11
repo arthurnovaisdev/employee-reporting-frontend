@@ -22,6 +22,7 @@ import { useAuth } from '../../features/auth/AuthContext'
 import { getTerminalResetTokenError } from '../../features/auth/passwordErrors'
 import {
   resetPasswordSchema,
+  resetTokenSchema,
   toResetPasswordRequest,
   type ResetPasswordFormValues,
 } from '../../features/auth/passwordForms'
@@ -35,7 +36,8 @@ export function ResetPasswordPage() {
   const { endSession } = useAuth()
   const [token, setToken] = useState(() => {
     const value = new URLSearchParams(location.search).get('token') ?? ''
-    return value.trim().length > 0 ? value : ''
+    const parsedToken = resetTokenSchema.safeParse(value.trim())
+    return parsedToken.success ? parsedToken.data : ''
   })
   const [tokenError, setTokenError] = useState<string | null>(() => token ? null : missingTokenMessage)
   const [requestError, setRequestError] = useState<string | null>(null)
@@ -178,7 +180,7 @@ export function ResetPasswordPage() {
           Redefinir senha
         </Typography>
         <Typography color="text.secondary" sx={{ mt: 0.75, fontSize: '0.9rem' }}>
-          Escolha uma nova senha com 8 a 100 caracteres.
+          Escolha uma nova senha com 6 a 100 caracteres.
         </Typography>
       </Box>
 

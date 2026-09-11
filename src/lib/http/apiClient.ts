@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { apiBaseUrl } from '../../config/env'
-import { getAccessToken, setAccessToken } from '../../features/auth/tokenStore'
+import { clearAuthSession, getAccessToken } from '../../features/auth/authStore'
 import { getApiErrorMessage } from './apiError'
 
 declare module 'axios' {
@@ -17,7 +17,8 @@ const publicPaths = [
 ]
 
 function isPublicRequest(url?: string) {
-  return publicPaths.some((path) => url?.startsWith(path))
+  const path = url?.split(/[?#]/, 1)[0]
+  return publicPaths.includes(path ?? '')
 }
 
 export const apiClient = axios.create({
@@ -30,7 +31,9 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use((config) => {
   const token = getAccessToken()
 
-  if (token && !isPublicRequest(config.url)) {
+  if (isPublicRequest(config.url)) {
+    config.headers.delete('Authorization')
+  } else if (token) {
     config.headers.set('Authorization', `Bearer ${token}`)
   }
 
@@ -46,7 +49,7 @@ apiClient.interceptors.response.use(
 
     const publicRequest = isPublicRequest(error.config?.url)
     if (!publicRequest && error.response?.status === 401) {
-      setAccessToken(null)
+      clearAuthSession()
       window.dispatchEvent(new CustomEvent('auth:unauthorized', {
         detail: { message: getApiErrorMessage(error) },
       }))

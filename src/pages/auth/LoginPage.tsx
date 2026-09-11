@@ -15,22 +15,14 @@ import {
 } from '@mui/material'
 import { Controller, useForm } from 'react-hook-form'
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
-import { z } from 'zod'
 import { useState } from 'react'
-import { login } from '../../features/auth/auth.api'
+import {
+  login,
+  loginRequestSchema,
+  type LoginRequestDTO,
+} from '../../features/auth/auth.api'
 import { useAuth } from '../../features/auth/AuthContext'
 import { getApiErrorMessage, getApiValidationDetails } from '../../lib/http/apiError'
-
-const loginSchema = z.object({
-  cpf: z.string().regex(/^\d{11}$/, 'Informe um CPF com 11 dígitos.'),
-  password: z
-    .string()
-    .min(8, 'A senha deve ter entre 8 e 100 caracteres.')
-    .max(100, 'A senha deve ter entre 8 e 100 caracteres.')
-    .refine((value) => value.trim().length > 0, 'Informe sua senha.'),
-})
-
-type LoginFormValues = z.infer<typeof loginSchema>
 
 function formatCpf(value: string) {
   return value
@@ -50,6 +42,9 @@ export function LoginPage() {
   const authMessage = typeof (location.state as { authMessage?: unknown } | null)?.authMessage === 'string'
     ? (location.state as { authMessage: string }).authMessage
     : null
+  const loginNotice = typeof (location.state as { loginNotice?: unknown } | null)?.loginNotice === 'string'
+    ? (location.state as { loginNotice: string }).loginNotice
+    : null
   const {
     control,
     register,
@@ -57,15 +52,15 @@ export function LoginPage() {
     resetField,
     setError,
     formState: { errors, isSubmitting },
-  } = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
+  } = useForm<LoginRequestDTO>({
+    resolver: zodResolver(loginRequestSchema),
     defaultValues: {
       cpf: '',
       password: '',
     },
   })
 
-  async function onSubmit(values: LoginFormValues) {
+  async function onSubmit(values: LoginRequestDTO) {
     setRequestError(null)
 
     try {
@@ -124,6 +119,12 @@ export function LoginPage() {
         {(requestError || authMessage) && (
           <Alert severity="error" aria-live="polite">
             {requestError ?? authMessage}
+          </Alert>
+        )}
+
+        {loginNotice && !requestError && !authMessage && (
+          <Alert severity="success" aria-live="polite">
+            {loginNotice}
           </Alert>
         )}
 
