@@ -113,7 +113,7 @@ export function RegisterEmployeeDialog({ onClose, onCreated }: {
             fullWidth
             disabled={isSubmitting}
             error={Boolean(errors.password)}
-            helperText={errors.password?.message ?? 'De 8 a 100 caracteres.'}
+            helperText={errors.password?.message ?? 'De 6 a 100 caracteres.'}
             slotProps={{
               htmlInput: { maxLength: 100 },
               input: {

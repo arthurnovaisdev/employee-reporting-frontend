@@ -1,38 +1,19 @@
 import { z } from 'zod'
 import { apiClient } from '../../lib/http/apiClient'
 import { getApiErrorMessage } from '../../lib/http/apiError'
+import { readSpringPage } from '../../lib/http/springPage'
 
 const categorySchema = z.object({ id: z.string().uuid(), name: z.string(), active: z.boolean() })
-const metadataSchema = z.object({
-  number: z.number().int().nonnegative(),
-  totalPages: z.number().int().nonnegative(),
-  totalElements: z.number().int().nonnegative().optional(),
-  last: z.boolean().optional(),
-})
-const contentSchema = z.object({ content: z.array(categorySchema) })
 export type Category = z.infer<typeof categorySchema>
 
-// Page<T> não tem envelope confirmado no documento. Inspeciona e valida em
-// runtime os dois formatos Spring (metadados na raiz ou em page), falhando
-// explicitamente se o servidor devolver uma estrutura diferente.
 export function readCategoryPage(data: unknown) {
-  const content = contentSchema.safeParse(data)
-  const direct = metadataSchema.safeParse(data)
-  const nested = z.object({ page: metadataSchema }).safeParse(data)
-  const metadata = direct.success ? direct.data : nested.success ? nested.data.page : null
-  if (!content.success || !metadata) throw new Error('Formato de paginação de categorias não reconhecido.')
-  const { number, totalPages, totalElements, last } = metadata
-  if (
-    (totalPages === 0 && (number !== 0 || content.data.content.length !== 0)) ||
-    (totalPages > 0 && number >= totalPages) ||
-    (last !== undefined && last !== (number + 1 >= totalPages))
-  ) throw new Error('Metadados de paginação de categorias inconsistentes.')
+  const page = readSpringPage(data, categorySchema, 'categorias')
   return {
-    categories: content.data.content,
-    number,
-    totalPages,
-    totalElements,
-    hasNext: last !== undefined ? !last : number + 1 < totalPages,
+    categories: page.content,
+    number: page.number,
+    totalPages: page.totalPages,
+    totalElements: page.totalElements,
+    hasNext: !page.last,
   }
 }
 
@@ -40,7 +21,7 @@ export type CategoryPage = ReturnType<typeof readCategoryPage>
 
 export async function getCategoryPage(page: number, signal?: AbortSignal) {
   const response = await apiClient.get<unknown>('/categories', {
-    params: { page, size: 20, sort: 'name,asc' }, signal,
+    params: { page, size: 20 }, signal,
   })
   const result = readCategoryPage(response.data)
   if (result.number !== page) throw new Error('Página de categorias inesperada.')
@@ -52,7 +33,7 @@ export async function getCategories(signal?: AbortSignal): Promise<Category[]> {
   let page = 0
   while (true) {
     const response = await apiClient.get<unknown>('/categories', {
-      params: { page, size: 20, sort: 'name,asc' }, signal,
+      params: { page, size: 20 }, signal,
     })
     const result = readCategoryPage(response.data)
     if (result.number !== page) throw new Error('Página de categorias inesperada.')

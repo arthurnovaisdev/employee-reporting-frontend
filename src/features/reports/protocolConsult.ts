@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { apiClient } from '../../lib/http/apiClient'
 import { getApiErrorMessage } from '../../lib/http/apiError'
+import { protocolPattern, protocolSchema, trackingCodePattern } from './report.schema'
 
 export const reportStatuses = [
   'RECEIVED',
@@ -27,21 +28,18 @@ const normalizeCredential = (value: string) => value.trim().toUpperCase()
 export const protocolConsultSchema = z.object({
   protocol: z.string()
     .transform(normalizeCredential)
-    .pipe(z.string().regex(/^DEN-\d{4}-\d{7}$/, 'Informe um protocolo válido.')),
+    .pipe(z.string().regex(protocolPattern, 'Informe um protocolo válido.')),
   code: z.string()
     .transform(normalizeCredential)
     .pipe(
-      z.string().regex(
-        /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/,
-        'Informe um código de acompanhamento válido.',
-      ),
+      z.string().regex(trackingCodePattern, 'Informe um código de acompanhamento válido.'),
     ),
 })
 
 export type ProtocolConsultFormValues = z.infer<typeof protocolConsultSchema>
 
 export const reportResponseSchema = z.object({
-  protocol: z.string().min(1),
+  protocol: protocolSchema,
   category: z.string().min(1),
   description: z.string(),
   status: z.enum(reportStatuses),

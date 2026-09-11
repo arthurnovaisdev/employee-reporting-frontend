@@ -34,7 +34,7 @@ export function AttachmentPicker({ files, onChange, disabled, validating = false
     <Stack spacing={1.25}>
       <Typography id="attachments-label" variant="subtitle2">Anexos <Box component="span" color="text.secondary">(opcional)</Box></Typography>
       <Typography id="attachments-help" variant="body2" color="text.secondary">
-        JPEG, PNG ou PDF. Até 10 MB por arquivo e no envio completo, incluindo os dados dos arquivos.
+        JPEG (.jpg, .jpeg ou .jfif), PNG (.png) ou PDF (.pdf). Até 5 anexos, 10 MB por arquivo e 25 MiB no total.
         Você pode enviar a denúncia sem anexos.
       </Typography>
       <input

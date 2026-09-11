@@ -77,7 +77,7 @@ function CreateCategoryDialog({ onClose, onCreated }: {
           sx={{ pt: 0.5 }}
         >
           <Typography id="create-category-description" color="text.secondary" variant="body2">
-            Informe o nome e o estado inicial. A API atual mantém categorias ativas e inativas na listagem.
+            Informe o nome e o estado inicial. A listagem atual mostra somente categorias ativas; uma categoria criada inativa não aparecerá nela.
           </Typography>
           {requestError && <Alert severity="error" aria-live="assertive">{requestError}</Alert>}
           <TextField
@@ -171,10 +171,10 @@ export function AdminCategoriesPage() {
             {data.totalElements !== undefined && (
               <Paper sx={{ p: 2, minWidth: 150 }}>
                 <Typography color="primary.main" variant="h5">{data.totalElements.toLocaleString('pt-BR')}</Typography>
-                <Typography variant="body2" color="text.secondary">Categorias cadastradas</Typography>
+                <Typography variant="body2" color="text.secondary">Categorias disponíveis</Typography>
               </Paper>
             )}
-            <Typography variant="body2" color="text.secondary">20 categorias por página · ordem alfabética</Typography>
+            <Typography variant="body2" color="text.secondary">20 categorias ativas por página · ordem alfabética</Typography>
           </Stack>
 
           {data.categories.length === 0 ? (
@@ -187,10 +187,10 @@ export function AdminCategoriesPage() {
                     <Box sx={{ minWidth: 0 }}>
                       <Typography sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}>{category.name}</Typography>
                       <Typography color="text.secondary" variant="body2" sx={{ mt: 0.5 }}>
-                        {category.active ? 'Disponível para uso nas denúncias.' : 'Mantida no cadastro como inativa.'}
+                        Disponível para uso nas denúncias.
                       </Typography>
                     </Box>
-                    <Chip label={category.active ? 'Ativa' : 'Inativa'} size="small" color={category.active ? 'success' : 'default'} sx={{ flexShrink: 0 }} />
+                    <Chip label="Ativa" size="small" color="success" sx={{ flexShrink: 0 }} />
                   </Stack>
                 </Paper>
               ))}

@@ -11,7 +11,7 @@ import { useAuth } from '../../features/auth/AuthContext'
 import { AttachmentPicker } from '../../features/reports/AttachmentPicker'
 import { getCategories } from '../../features/reports/categories.api'
 import { useReportFlow } from '../../features/reports/ReportFlowLayout'
-import { reportSchema, toReportRequest, type ReportFormValues } from '../../features/reports/report.schema'
+import { reportSchema, todayAsLocalIsoDate, toReportRequest, type ReportFormValues } from '../../features/reports/report.schema'
 import { submitReport } from '../../features/reports/reports.api'
 import { getApiErrorMessage, getApiValidationDetails } from '../../lib/http/apiError'
 
@@ -120,12 +120,14 @@ export function NewReportPage() {
             </TextField>
           )} />
           <TextField {...register('description')} label="Descrição do ocorrido" placeholder="Descreva o que aconteceu…" multiline minRows={6} fullWidth required disabled={disabled}
-            error={Boolean(errors.description)} helperText={errors.description?.message ?? `${watch('description').length.toLocaleString('pt-BR')} / 5.000 caracteres`} />
+            error={Boolean(errors.description)} helperText={errors.description?.message ?? `${watch('description').length.toLocaleString('pt-BR')} / 5.000 caracteres`}
+            slotProps={{ htmlInput: { maxLength: 5000 } }} />
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField {...register('incidentDate')} type="date" label="Data do ocorrido (opcional)" fullWidth disabled={disabled}
-              slotProps={{ inputLabel: { shrink: true } }} error={Boolean(errors.incidentDate)} helperText={errors.incidentDate?.message} />
+              slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: todayAsLocalIsoDate() } }} error={Boolean(errors.incidentDate)} helperText={errors.incidentDate?.message} />
             <TextField {...register('incidentLocation')} label="Local do ocorrido (opcional)" fullWidth disabled={disabled}
-              error={Boolean(errors.incidentLocation)} helperText={errors.incidentLocation?.message} />
+              error={Boolean(errors.incidentLocation)} helperText={errors.incidentLocation?.message ?? `${watch('incidentLocation').length} / 255 caracteres`}
+              slotProps={{ htmlInput: { maxLength: 255 } }} />
           </Stack>
           <AttachmentPicker files={files} onChange={setFiles} disabled={disabled} validating={validatingFiles} onValidating={setValidatingFiles} />
           <Typography color="text.secondary" variant="body2">Revise as informações antes de enviar. Ao finalizar, guarde o protocolo e o código de acompanhamento para consultar sua denúncia.</Typography>

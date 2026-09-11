@@ -47,15 +47,20 @@ const authenticate = (token = 'fixture-admin', role = 'ADMIN', passwordChanged =
   setAuthSession({ token, name: 'Teste', role, passwordChanged })
 }
 const setAccessToken = (token) => authenticate(token)
+const springPage = (content, number = 0, totalPages = 1, totalElements = content.length) => ({
+  content, number, size: 20, totalElements, totalPages, first: number === 0,
+  last: totalPages === 0 || number + 1 >= totalPages, empty: content.length === 0,
+  numberOfElements: content.length,
+})
 
 test('listagem de usuários usa a paginação própria do endpoint', async () => {
   setAccessToken('fixture-admin')
   apiClient.defaults.adapter = async (config) => {
     assert.equal(config.method, 'get')
     assert.equal(config.url, '/users')
-    assert.deepEqual(config.params, { page: 2, size: 20, sort: 'name,asc' })
+    assert.deepEqual(config.params, { page: 2, size: 20 })
     assert.equal(config.headers.get('Authorization'), 'Bearer fixture-admin')
-    return response(config, { content: [employee], number: 2, totalPages: 4, totalElements: 61, last: false })
+    return response(config, springPage([employee], 2, 4, 61))
   }
 
   const result = await getUsers(2)
@@ -64,12 +69,12 @@ test('listagem de usuários usa a paginação própria do endpoint', async () =>
   assert.equal(result.totalElements, 61)
 })
 
-test('adaptador de usuários aceita metadados Spring válidos e rejeita inconsistências', () => {
-  const nested = readUserPage({ content: [employee], page: { number: 0, totalPages: 1, totalElements: 1 } })
-  assert.equal(nested.hasNext, false)
+test('adaptador de usuários aceita Page Spring padrão e rejeita metadados incompletos ou inconsistentes', () => {
+  const first = readUserPage(springPage([employee]))
+  assert.equal(first.hasNext, false)
   assert.throws(() => readUserPage({ items: [employee], number: 0, totalPages: 1 }))
-  assert.throws(() => readUserPage({ content: [employee], number: 1, totalPages: 1 }))
-  assert.throws(() => readUserPage({ content: [employee], number: 0, totalPages: 1, last: false }))
+  assert.throws(() => readUserPage({ content: [employee], page: springPage([employee]) }))
+  assert.throws(() => readUserPage({ ...springPage([employee]), numberOfElements: 0 }))
 })
 
 test('cadastro envia exatamente RegisterRequestDTO e não oferece role', async () => {
@@ -126,8 +131,8 @@ test('categorias administrativas usam somente GET paginado e POST com CategoryRe
     if (call === 1) {
       assert.equal(config.method, 'get')
       assert.equal(config.url, '/categories')
-      assert.deepEqual(config.params, { page: 1, size: 20, sort: 'name,asc' })
-      return response(config, { content: [category], number: 1, totalPages: 2, last: true })
+      assert.deepEqual(config.params, { page: 1, size: 20 })
+      return response(config, springPage([category], 1, 2, 21))
     }
     assert.equal(config.method, 'post')
     assert.equal(config.url, '/categories')
@@ -139,7 +144,7 @@ test('categorias administrativas usam somente GET paginado e POST com CategoryRe
   assert.deepEqual(page.categories, [category])
   assert.equal(page.hasNext, false)
   assert.deepEqual(await createCategory({ name: 'Conduta interna', active: true, extra: 'ignorar' }), category)
-  assert.throws(() => readCategoryPage({ content: [category], number: 2, totalPages: 2 }))
+  assert.throws(() => readCategoryPage({ ...springPage([category]), number: 2, first: false }))
 })
 
 test('rota administrativa de categorias bloqueia EMPLOYEE e permite ADMIN', () => {

@@ -137,6 +137,18 @@ test('erros respeitam erro/detalhes, ignoram message e ocultam conteúdo interno
   assert.match(getApiErrorMessage(new axios.AxiosError('Network Error', 'ERR_NETWORK')), /conectar/)
 })
 
+test('erros 413 e 429 explicam limites e usam Retry-After quando disponível', () => {
+  const config = { url: '/reports', method: 'post' }
+  const error = (status, headers = {}) => new axios.AxiosError(
+    'Falha simulada', 'ERR_BAD_RESPONSE', config, undefined,
+    { ...response(config, { erro: 'detalhe que não deve substituir a orientação segura' }, status), headers },
+  )
+  assert.match(getApiErrorMessage(error(413)), /5 anexos.*10 MB.*25 MiB/)
+  assert.match(getApiErrorMessage(error(429)), /Aguarde um pouco/)
+  assert.match(getApiErrorMessage(error(429, { 'retry-after': '45' })), /45 segundos/)
+  assert.equal(getApiErrorMessage(error(429, { 'retry-after': 'inválido' })).includes('inválido'), false)
+})
+
 test('401 em rota pública não encerra uma sessão válida', async () => {
   let unauthorized = 0
   window.addEventListener('auth:unauthorized', () => unauthorized++)

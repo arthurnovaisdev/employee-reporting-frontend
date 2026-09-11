@@ -215,7 +215,7 @@ export function ProtocolConsultPage() {
           <TextField
             {...register('protocol')}
             label="Protocolo"
-            placeholder="DEN-AAAA-0000000"
+            placeholder="DEN-AAAA-ABCD2345"
             required
             fullWidth
             disabled={isSubmitting}
@@ -223,7 +223,7 @@ export function ProtocolConsultPage() {
             helperText={errors.protocol?.message}
             slotProps={{
               htmlInput: {
-                maxLength: 16,
+                maxLength: 17,
                 autoCapitalize: 'characters',
                 spellCheck: false,
               },
@@ -241,7 +241,7 @@ export function ProtocolConsultPage() {
             helperText={errors.code?.message}
             slotProps={{
               htmlInput: {
-                maxLength: 6,
+                maxLength: 10,
                 autoCapitalize: 'characters',
                 spellCheck: false,
               },

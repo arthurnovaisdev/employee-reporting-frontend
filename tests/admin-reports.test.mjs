@@ -11,14 +11,14 @@ const server = await createServer({ configFile: false, server: { middlewareMode:
 after(() => server.close())
 globalThis.window = new EventTarget()
 const { getAdminReports, readAdminReportPage, updateReportStatus, getAdminReportError, getAdminReportDetail, getAdminAttachment, getAdminAttachmentError } = await server.ssrLoadModule('/src/features/reports/adminReports.api.ts')
-const { reserveAttachmentPreview, formatAttachmentSize } = await server.ssrLoadModule('/src/features/reports/adminAttachmentPreview.ts')
+const { downloadAttachment, formatAttachmentSize } = await server.ssrLoadModule('/src/features/reports/adminAttachmentPreview.ts')
 const { AdminReportAttachments } = await server.ssrLoadModule('/src/features/reports/AdminReportAttachments.tsx')
 const { apiClient } = await server.ssrLoadModule('/src/lib/http/apiClient.ts')
 const { setAuthSession, getAccessToken } = await server.ssrLoadModule('/src/features/auth/authStore.ts')
 const { AuthProvider } = await server.ssrLoadModule('/src/features/auth/AuthContext.tsx')
 const { ProtectedRoute, PasswordChangedRoute, RoleRoute } = await server.ssrLoadModule('/src/features/auth/RouteGuards.tsx')
 
-const report = { protocol: 'DEN-2026-1234567', category: 'Conduta interna', description: 'Relato de teste.', status: 'RECEIVED', createdAt: '2026-09-01T12:30:00' }
+const report = { protocol: 'DEN-2026-ABCD2345', category: 'Conduta interna', description: 'Relato de teste.', status: 'RECEIVED', createdAt: '2026-09-01T12:30:00' }
 const response = (config, data, status = 200) => ({ config, data, status, statusText: '', headers: {} })
 const attachment = { id: '550e8400-e29b-41d4-a716-446655440002', originalFileName: 'comprovante.pdf', contentType: 'application/pdf', fileSize: 245760, createdAt: '2026-09-04T12:35:00' }
 const detail = { ...report, incidentDate: '2026-09-03', incidentLocation: 'Unidade Salvador', attachments: [attachment] }
@@ -26,6 +26,11 @@ const authenticate = (token = 'fixture-admin', role = 'ADMIN', passwordChanged =
   setAuthSession({ token, name: 'Teste', role, passwordChanged })
 }
 const setAccessToken = (token) => authenticate(token)
+const springPage = (content, number = 0, totalPages = 1, totalElements = content.length) => ({
+  content, number, size: 10, totalElements, totalPages, first: number === 0,
+  last: totalPages === 0 || number + 1 >= totalPages, empty: content.length === 0,
+  numberOfElements: content.length,
+})
 
 test('detalhe usa protocolo, Bearer e DTO administrativo, descartando campos privados', async () => {
   setAccessToken('fixture-admin')
@@ -59,9 +64,16 @@ test('arquivo usa endpoint autenticado com responseType blob para PDF, JPEG e PN
       assert.match(config.headers.get('Accept'), /application\/pdf/)
       assert.equal(config.responseType, 'blob')
       assert.equal(config.signal, controller.signal)
-      return response(config, blob)
+      return {
+        ...response(config, blob),
+        headers: new axios.AxiosHeaders({
+          'content-disposition': "attachment; filename*=UTF-8''comprovante%20seguro.pdf",
+        }),
+      }
     }
-    assert.equal(await getAdminAttachment(report.protocol, attachment.id, controller.signal), blob)
+    const downloaded = await getAdminAttachment(report.protocol, attachment.id, controller.signal)
+    assert.equal(downloaded.blob, blob)
+    assert.equal(downloaded.suggestedFileName, 'comprovante seguro.pdf')
   }
 })
 
@@ -84,58 +96,34 @@ test('erros do detalhe e blob preservam sessão em 403 e encerram em 401, sem ex
   assert.match(getAdminAttachmentError(new axios.AxiosError('Network Error', 'ERR_NETWORK')), /conexão/)
 })
 
-test('preview reserva aba, navega por blob e revoga URLs ao fechar ou descartar', () => {
+test('download usa blob local, nome sugerido e revoga a URL temporária', () => {
   const originalWindow = globalThis.window
+  const originalDocument = globalThis.document
   const originalCreate = URL.createObjectURL
   const originalRevoke = URL.revokeObjectURL
-  const urls = []
   const revoked = []
-  let timerCallback
-  let timersCleared = 0
-  let disposed = 0
-  const makeTab = () => ({ closed: false, opener: {}, document: { body: {} }, location: { replace: (url) => urls.push(url) }, close() { this.closed = true } })
-  let tab = makeTab()
-  globalThis.window = {
-    open: (url, target) => { assert.equal(url, 'about:blank'); assert.equal(target, '_blank'); return tab },
-    setInterval: (callback) => { timerCallback = callback; return 1 },
-    clearInterval: () => { timersCleared++ },
-  }
+  let clicked = 0
+  let appended = 0
+  let removed = 0
+  const link = { href: '', download: '', rel: '', style: {}, click: () => clicked++, remove: () => removed++ }
+  globalThis.window = { setTimeout: (callback) => { callback(); return 1 } }
+  globalThis.document = { createElement: (tag) => { assert.equal(tag, 'a'); return link }, body: { appendChild: () => appended++ } }
   URL.createObjectURL = () => 'blob:fixture'
   URL.revokeObjectURL = (url) => revoked.push(url)
   try {
-    const preview = reserveAttachmentPreview(() => disposed++)
-    assert.equal(tab.opener, null)
-    assert.match(tab.document.body.textContent, /Carregando/)
-    assert.deepEqual(urls, [])
-    preview.show(new Blob(['fixture'], { type: 'application/pdf' }))
-    assert.deepEqual(urls, ['blob:fixture'])
-    assert.deepEqual(revoked, [])
-    tab.closed = true
-    timerCallback()
-    preview.dispose()
+    downloadAttachment(new Blob(['fixture'], { type: 'application/pdf' }), 'comprovante seguro.pdf')
+    assert.equal(link.href, 'blob:fixture')
+    assert.equal(link.download, 'comprovante seguro.pdf')
+    assert.equal(link.rel, 'noopener')
+    assert.equal(appended, 1)
+    assert.equal(clicked, 1)
+    assert.equal(removed, 1)
     assert.deepEqual(revoked, ['blob:fixture'])
-    assert.equal(timersCleared, 1)
-    assert.equal(disposed, 1)
-    tab = makeTab()
-    const pending = reserveAttachmentPreview()
-    pending.dispose()
-    assert.equal(tab.closed, true)
-    pending.show(new Blob(['fixture'], { type: 'image/png' }))
-    assert.equal(urls.length, 1)
-    tab = makeTab()
-    const active = reserveAttachmentPreview()
-    active.show(new Blob(['fixture'], { type: 'image/jpeg' }))
-    active.dispose()
-    assert.equal(revoked.length, 2)
-    tab = makeTab()
-    const unsafe = reserveAttachmentPreview()
-    assert.throws(() => unsafe.show(new Blob(['<script>'], { type: 'text/html' })))
-    unsafe.dispose()
-    assert.equal(urls.length, 2)
-    tab = null
-    assert.equal(reserveAttachmentPreview(), null)
+    assert.throws(() => downloadAttachment(new Blob(['<script>'], { type: 'text/html' }), 'inseguro.html'))
   } finally {
     globalThis.window = originalWindow
+    if (originalDocument === undefined) delete globalThis.document
+    else globalThis.document = originalDocument
     URL.createObjectURL = originalCreate
     URL.revokeObjectURL = originalRevoke
   }
@@ -153,6 +141,7 @@ test('seção de anexos exibe metadados amigáveis, vazio sem erro e ações só
     assert.match(html, /comprovante.pdf/)
     assert.match(html, /240 KB/)
     assert.match(html, /04\/09\/2026 às 12:35/)
+    assert.match(html, /Baixar/)
     assert.equal(html.includes(attachment.id), false)
     assert.equal(html.includes('/reports/admin/'), false)
     assert.equal(/<button[^>]*disabled/.test(html), role !== 'ADMIN')
@@ -168,14 +157,14 @@ test('seção de anexos exibe metadados amigáveis, vazio sem erro e ações só
 
 // Fixtures do adaptador defensivo, não exemplos confirmados do backend real.
 test('GET administrativo envia apenas page/size e mantém a ordem do retorno', async () => {
-  const reports = [{ ...report, protocol: 'DEN-2026-7654321', createdAt: '2026-09-02T12:30:00' }, report]
+  const reports = [{ ...report, protocol: 'DEN-2026-WXYZ6789', createdAt: '2026-09-02T12:30:00' }, report]
   setAccessToken('fixture-admin')
   apiClient.defaults.adapter = async (config) => {
     assert.equal(config.method, 'get')
     assert.equal(config.url, '/reports/admin')
     assert.deepEqual(config.params, { page: 0, size: 10 })
     assert.equal(config.headers.get('Authorization'), 'Bearer fixture-admin')
-    return response(config, { content: reports, number: 0, totalPages: 2, totalElements: 12, last: false })
+    return response(config, springPage(reports, 0, 2, 12))
   }
   const result = await getAdminReports(0)
   assert.deepEqual(result.reports, reports)
@@ -183,17 +172,13 @@ test('GET administrativo envia apenas page/size e mantém a ordem do retorno', a
   assert.equal(result.totalElements, 12)
 })
 
-test('paginação usa somente metadados válidos e não inventa totais ausentes', () => {
-  const finalPage = readAdminReportPage({ content: [report], page: { number: 1, totalPages: 2, totalElements: 11 } })
+test('paginação usa o Page Spring padrão e rejeita metadados ausentes ou inconsistentes', () => {
+  const finalPage = readAdminReportPage(springPage([report], 1, 2, 11))
   assert.equal(finalPage.hasNext, false)
-  const partial = readAdminReportPage({ content: [report], number: 0 })
-  assert.equal(partial.totalPages, undefined)
-  assert.equal(partial.totalElements, undefined)
-  assert.equal(partial.hasNext, undefined)
-  assert.equal(readAdminReportPage({ content: [], number: 0, totalPages: 0, totalElements: 0 }).hasNext, false)
+  assert.equal(readAdminReportPage(springPage([], 0, 0, 0)).hasNext, false)
   assert.throws(() => readAdminReportPage({ items: [report], number: 0 }))
-  assert.throws(() => readAdminReportPage({ content: [report], number: 0, totalPages: '2' }))
-  assert.throws(() => readAdminReportPage({ content: [report], number: 0, totalPages: 0 }))
+  assert.throws(() => readAdminReportPage({ ...springPage([report]), totalPages: '2' }))
+  assert.throws(() => readAdminReportPage({ ...springPage([report]), numberOfElements: 0 }))
 })
 
 test('PATCH usa enum exato e note, ignora campos extras e consome só o DTO real', async () => {

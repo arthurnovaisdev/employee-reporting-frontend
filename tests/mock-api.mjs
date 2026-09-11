@@ -46,9 +46,9 @@ createServer(async (request, response) => {
       response.writeHead(204).end()
     }
   } else if (url.pathname === '/api/categories') {
-    response.end(JSON.stringify({ content: [{ id: categoryId, name: 'Conduta interna', active: true }], number: 0, totalPages: 1 }))
+    response.end(JSON.stringify({ content: [{ id: categoryId, name: 'Conduta interna', active: true }], number: 0, size: 20, totalElements: 1, totalPages: 1, first: true, last: true, empty: false, numberOfElements: 1 }))
   } else if (url.pathname === '/api/reports') {
-    response.writeHead(201).end(JSON.stringify({ protocol: 'DEN-2026-1234567', trackingCode: 'ABC234' }))
+    response.writeHead(201).end(JSON.stringify({ protocol: 'DEN-2026-ABCD2345', trackingCode: 'ABCD2345EF' }))
   } else if (/\/attachments$/.test(url.pathname)) {
     response.writeHead(500).end(JSON.stringify({ erro: 'Falha simulada no upload.' }))
   } else {

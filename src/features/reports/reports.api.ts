@@ -1,11 +1,13 @@
 import axios from 'axios'
 import { apiClient } from '../../lib/http/apiClient'
+import { getApiErrorMessage } from '../../lib/http/apiError'
 import { createAttachmentFormData, validateAttachments } from './attachments'
-import type { ProtocolResponseDTO, ReportRequestDTO } from './report.schema'
+import { protocolResponseSchema, type ProtocolResponseDTO, type ReportRequestDTO } from './report.schema'
 
 export type AttachmentStatus = 'none' | 'uploading' | 'uploaded' | 'failed'
 export interface ReportReceipt extends ProtocolResponseDTO {
   attachmentStatus: AttachmentStatus
+  attachmentError?: string
   sessionExpired?: boolean
 }
 
@@ -17,7 +19,8 @@ export async function submitReport(
   const validationError = await validateAttachments(files)
   if (validationError) throw new Error(validationError)
 
-  const { data } = await apiClient.post<ProtocolResponseDTO>('/reports', request)
+  const response = await apiClient.post<unknown>('/reports', request)
+  const data = protocolResponseSchema.parse(response.data)
   const receipt: ReportReceipt = {
     protocol: data.protocol,
     trackingCode: data.trackingCode,
@@ -29,7 +32,7 @@ export async function submitReport(
   if (!files.length) return receipt
 
   try {
-    const error = await validateAttachments(files, receipt.trackingCode)
+    const error = await validateAttachments(files)
     if (error) throw new Error(error)
     await apiClient.post(
       `/reports/${encodeURIComponent(receipt.protocol)}/attachments`,
@@ -42,6 +45,7 @@ export async function submitReport(
     return {
       ...receipt,
       attachmentStatus: 'failed',
+      attachmentError: getApiErrorMessage(error),
       sessionExpired: axios.isAxiosError(error) && error.response?.status === 401,
     }
   }

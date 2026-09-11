@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { apiClient } from '../../lib/http/apiClient'
 import { getApiErrorMessage } from '../../lib/http/apiError'
+import { readSpringPage } from '../../lib/http/springPage'
 
 export const userResponseSchema = z.object({
   id: z.string().uuid(),
@@ -14,42 +15,14 @@ export const userResponseSchema = z.object({
 
 export type UserResponseDTO = z.infer<typeof userResponseSchema>
 
-const userPageMetadataSchema = z.object({
-  number: z.number().int().nonnegative(),
-  totalPages: z.number().int().nonnegative().optional(),
-  totalElements: z.number().int().nonnegative().optional(),
-  last: z.boolean().optional(),
-})
-
 export function readUserPage(data: unknown) {
-  const content = z.object({ content: z.array(userResponseSchema) }).safeParse(data)
-  const direct = userPageMetadataSchema.safeParse(data)
-  const nested = z.object({ page: userPageMetadataSchema }).safeParse(data)
-  const metadata = direct.success ? direct.data : nested.success ? nested.data.page : null
-
-  if (!content.success || !metadata) {
-    throw new Error('Resposta de paginação de usuários não reconhecida.')
-  }
-
-  const { number, totalPages, totalElements, last } = metadata
-  if (totalPages !== undefined && (
-    (totalPages === 0 && (number !== 0 || content.data.content.length !== 0)) ||
-    (totalPages > 0 && number >= totalPages) ||
-    (last !== undefined && last !== (number + 1 >= totalPages))
-  )) {
-    throw new Error('Metadados de paginação de usuários inconsistentes.')
-  }
-
+  const page = readSpringPage(data, userResponseSchema, 'usuários')
   return {
-    users: content.data.content,
-    number,
-    totalPages,
-    totalElements,
-    hasNext: last !== undefined
-      ? !last
-      : totalPages !== undefined
-        ? number + 1 < totalPages
-        : undefined,
+    users: page.content,
+    number: page.number,
+    totalPages: page.totalPages,
+    totalElements: page.totalElements,
+    hasNext: !page.last,
   }
 }
 
@@ -57,7 +30,7 @@ export type UserPage = ReturnType<typeof readUserPage>
 
 export async function getUsers(page: number, signal?: AbortSignal) {
   const { data } = await apiClient.get<unknown>('/users', {
-    params: { page, size: 20, sort: 'name,asc' },
+    params: { page, size: 20 },
     signal,
   })
   const result = readUserPage(data)
@@ -84,7 +57,7 @@ export const registerEmployeeFormSchema = z.object({
     z.literal(''),
     z.string().trim().email('Informe um e-mail válido.').max(150, 'Use no máximo 150 caracteres.'),
   ]),
-  password: z.string().min(8, 'A senha deve ter pelo menos 8 caracteres.').max(100, 'A senha deve ter no máximo 100 caracteres.'),
+  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres.').max(100, 'A senha deve ter no máximo 100 caracteres.'),
 })
 
 export type RegisterEmployeeForm = z.infer<typeof registerEmployeeFormSchema>
@@ -93,7 +66,7 @@ const registerRequestSchema = z.object({
   name: z.string().min(1).max(150),
   cpf: z.string().regex(/^\d{11}$/),
   contactEmail: z.string().email().max(150).nullable(),
-  password: z.string().min(8).max(100),
+  password: z.string().min(6).max(100),
 })
 
 export function toRegisterRequest(values: RegisterEmployeeForm) {

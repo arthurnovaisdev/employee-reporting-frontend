@@ -146,7 +146,7 @@ export function AdminUserDetail({ selectedUser, onClose, onChanged }: {
         <DialogTitle id="deactivate-user-title">Desativar este usuário?</DialogTitle>
         <DialogContent>
           <Typography id="deactivate-user-description">
-            {user.name} poderá perder o acesso ao sistema. Sessões já emitidas podem permanecer válidas até expirarem, conforme o comportamento atual do serviço.
+            {user.name} perderá o acesso ao sistema. A desativação também invalida os JWTs emitidos anteriormente para essa conta.
           </Typography>
           {actionError && <Alert severity="error" sx={{ mt: 2 }}>{actionError}</Alert>}
         </DialogContent>

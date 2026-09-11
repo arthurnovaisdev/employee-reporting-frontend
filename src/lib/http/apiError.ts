@@ -30,6 +30,15 @@ function readBackendErrorBody(error: unknown) {
   }
 }
 
+function readRetryAfter(error: unknown) {
+  if (!axios.isAxiosError(error)) return null
+  const headers = error.response?.headers
+  const value = typeof headers?.get === 'function' ? headers.get('retry-after') : headers?.['retry-after']
+  if (typeof value !== 'string' || !/^\d+$/.test(value.trim())) return null
+  const seconds = Number(value)
+  return Number.isSafeInteger(seconds) && seconds > 0 ? seconds : null
+}
+
 export function getApiValidationDetails(error: unknown) {
   return readBackendErrorBody(error)?.detalhes
 }
@@ -59,6 +68,14 @@ export function getApiErrorMessage(error: unknown, options: ApiErrorMessageOptio
       return backendMessage ?? 'O recurso solicitado não foi encontrado.'
     case 409:
       return backendMessage ?? 'Não foi possível concluir porque os dados informados estão em conflito.'
+    case 413:
+      return 'O envio excedeu o limite permitido. Envie no máximo 5 anexos, com até 10 MB por arquivo e 25 MiB no total.'
+    case 429: {
+      const retryAfter = readRetryAfter(error)
+      return retryAfter
+        ? `Muitas tentativas. Aguarde ${retryAfter} segundos antes de tentar novamente.`
+        : 'Muitas tentativas. Aguarde um pouco antes de tentar novamente.'
+    }
     default:
       return status >= 500
         ? 'O serviço está temporariamente indisponível. Tente novamente mais tarde.'

@@ -1,34 +1,17 @@
 import { z } from 'zod'
 import { apiClient } from '../../lib/http/apiClient'
 import { getApiErrorMessage } from '../../lib/http/apiError'
+import { readSpringPage } from '../../lib/http/springPage'
 import { reportResponseSchema, reportStatuses } from './protocolConsult'
 
-// Adaptador defensivo, como em categories.api.ts. O documento local ainda não
-// confirma o envelope Page<T>. Só utiliza metadados presentes e válidos;
-// formatos desconhecidos falham sem fabricar totais ou inferir a última página.
-const metadataSchema = z.object({
-  number: z.number().int().nonnegative(),
-  totalPages: z.number().int().nonnegative().optional(),
-  totalElements: z.number().int().nonnegative().optional(),
-  last: z.boolean().optional(),
-})
-
 export function readAdminReportPage(data: unknown) {
-  const content = z.object({ content: z.array(reportResponseSchema) }).safeParse(data)
-  const direct = metadataSchema.safeParse(data)
-  const nested = z.object({ page: metadataSchema }).safeParse(data)
-  const metadata = direct.success ? direct.data : nested.success ? nested.data.page : null
-  if (!content.success || !metadata) throw new Error('Resposta de paginação não reconhecida.')
-  const { number, totalPages, totalElements, last } = metadata
-  if (totalPages !== undefined && (
-    (totalPages === 0 && (number !== 0 || content.data.content.length !== 0)) ||
-    (totalPages > 0 && number >= totalPages) ||
-    (last !== undefined && last !== (number + 1 >= totalPages))
-  )) throw new Error('Metadados de paginação inconsistentes.')
+  const page = readSpringPage(data, reportResponseSchema, 'denúncias')
   return {
-    reports: content.data.content,
-    number, totalPages, totalElements,
-    hasNext: last !== undefined ? !last : totalPages !== undefined ? number + 1 < totalPages : undefined,
+    reports: page.content,
+    number: page.number,
+    totalPages: page.totalPages,
+    totalElements: page.totalElements,
+    hasNext: !page.last,
   }
 }
 
@@ -51,6 +34,26 @@ export const reportAdminResponseSchema = reportResponseSchema.extend({
 export type AttachmentResponseDTO = z.infer<typeof attachmentResponseSchema>
 export type ReportAdminResponseDTO = z.infer<typeof reportAdminResponseSchema>
 
+function safeAttachmentFileName(value: string | null) {
+  if (!value) return null
+  const encoded = value.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)?.[1]
+  const quoted = value.match(/filename\s*=\s*"([^"]+)"/i)?.[1]
+  const plain = value.match(/filename\s*=\s*([^;]+)/i)?.[1]
+  let candidate = encoded ?? quoted ?? plain
+  if (!candidate) return null
+  try {
+    if (encoded) candidate = decodeURIComponent(candidate)
+  } catch {
+    return null
+  }
+  const rawBaseName = candidate.replace(/\\/g, '/').split('/').pop() ?? ''
+  const baseName = Array.from(rawBaseName)
+    .filter((character) => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127)
+    .join('')
+    .trim()
+  return baseName && baseName !== '.' && baseName !== '..' ? baseName : null
+}
+
 export async function getAdminReportDetail(protocol: string, signal?: AbortSignal) {
   const { data } = await apiClient.get<unknown>(`/reports/admin/${encodeURIComponent(protocol)}`, { signal })
   const report = reportAdminResponseSchema.parse(data)
@@ -59,11 +62,15 @@ export async function getAdminReportDetail(protocol: string, signal?: AbortSigna
 }
 
 export async function getAdminAttachment(protocol: string, attachmentId: string, signal?: AbortSignal) {
-  const { data } = await apiClient.get<Blob>(
+  const response = await apiClient.get<Blob>(
     `/reports/admin/${encodeURIComponent(protocol)}/attachments/${encodeURIComponent(attachmentId)}`,
     { responseType: 'blob', headers: { Accept: 'application/pdf, image/jpeg, image/png, application/json' }, signal },
   )
-  return data
+  const disposition = response.headers['content-disposition']
+  return {
+    blob: response.data,
+    suggestedFileName: safeAttachmentFileName(typeof disposition === 'string' ? disposition : null),
+  }
 }
 
 export function getAdminAttachmentError(error: unknown) {

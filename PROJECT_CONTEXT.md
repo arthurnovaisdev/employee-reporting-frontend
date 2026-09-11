@@ -378,7 +378,7 @@ O formulário em `/reports/new` usa React Hook Form e Zod com os quatro campos d
 
 As categorias são carregadas de `GET /api/categories`, percorrendo as páginas e validando a estrutura recebida em runtime. O adaptador reconhece metadados na raiz ou em `page`; a serialização do ambiente real ainda precisa ser confirmada com uma sessão autenticada. Categorias inativas não são filtradas, conforme a aceitação atual do backend.
 
-A criação usa `POST /api/reports`. Somente após receber protocolo e código, e somente quando existem arquivos, envia `FormData` para `POST /api/reports/{protocol}/attachments`, repetindo `files` e incluindo `trackingCode`. JPEG, PNG e PDF são validados por MIME, tamanho individual e tamanho do envio multipart, com limite de 10 MB; arquivos vazios são rejeitados.
+A criação usa `POST /api/reports`. Somente após receber protocolo e código, e somente quando existem arquivos, envia `FormData` para `POST /api/reports/{protocol}/attachments`, repetindo `files` e incluindo `trackingCode`. JPEG, PNG e PDF são validados por MIME, extensão, tamanho individual de 10 MB, máximo de 5 anexos e total acumulado de 25 MiB; arquivos vazios são rejeitados. O backend valida a assinatura real e aplica o limite do multipart.
 
 O comprovante em `/reports/success` oferece cópia individual e conjunta. Protocolo e código ficam apenas na memória das rotas do fluxo, sem storage, URL ou cache de mutations. São descartados ao sair do fluxo ou recarregar a página; a interface orienta o usuário a guardá-los.
 

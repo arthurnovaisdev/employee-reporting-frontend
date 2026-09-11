@@ -36,7 +36,7 @@ export function ReportSuccessPage() {
         </Box>
         {receipt.attachmentStatus === 'failed' && <Alert severity="warning">
           Sua denúncia foi registrada. Houve falha somente no envio dos anexos. O protocolo e o código de acompanhamento continuam válidos.
-          Não foi possível confirmar quais arquivos foram recebidos. Não registre a denúncia novamente.
+          {' '}{receipt.attachmentError ?? 'Não foi possível confirmar quais arquivos foram recebidos.'} Não registre a denúncia novamente.
         </Alert>}
         {receipt.attachmentStatus === 'uploaded' && <Alert severity="success">Os anexos foram enviados com sucesso.</Alert>}
         {receipt.sessionExpired && <Alert severity="info">Sua sessão expirou durante o envio dos anexos. Guarde os dados abaixo antes de entrar novamente.</Alert>}
