@@ -79,3 +79,32 @@ export function formatReportCreatedAt(value: string) {
   const [, year, month, day, hour, minute] = match
   return `${day}/${month}/${year} às ${hour}:${minute}`
 }
+
+const reportTimestampFormatter = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
+export function formatReportTimestamp(value: string) {
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(value)) return value
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  const parts = reportTimestampFormatter.formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value
+  const day = part('day')
+  const month = part('month')
+  const year = part('year')
+  const hour = part('hour')
+  const minute = part('minute')
+
+  if (!day || !month || !year || !hour || !minute) return value
+  return `${day}/${month}/${year} às ${hour}:${minute}`
+}

@@ -7,7 +7,7 @@ import { PagePagination } from '../../components/navigation/PagePagination'
 import { useAuth } from '../../features/auth/AuthContext'
 import { AdminReportDetail } from '../../features/reports/AdminReportDetail'
 import { getAdminReports, getAdminReportError, type AdminReportPage } from '../../features/reports/adminReports.api'
-import { formatReportCreatedAt, reportStatusLabels, type ReportResponseDTO } from '../../features/reports/protocolConsult'
+import { formatReportTimestamp, reportStatusLabels, type ReportResponseDTO } from '../../features/reports/protocolConsult'
 
 export function AdminReportsPage() {
   const { session } = useAuth()
@@ -68,7 +68,7 @@ export function AdminReportsPage() {
                     <Typography sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}>{report.protocol}</Typography>
                     <Chip component="span" label={reportStatusLabels[report.status]} size="small" color="primary" variant="outlined" sx={{ alignSelf: 'flex-start', maxWidth: '100%' }} />
                   </Stack>
-                  <Typography color="text.secondary" variant="body2" sx={{ mt: 1, overflowWrap: 'anywhere' }}>{report.category} · {formatReportCreatedAt(report.createdAt)}</Typography>
+                  <Typography color="text.secondary" variant="body2" sx={{ mt: 1, overflowWrap: 'anywhere' }}>{report.category} · {formatReportTimestamp(report.createdAt)}</Typography>
                   <Typography sx={{ mt: 1, overflowWrap: 'anywhere', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden', whiteSpace: 'pre-wrap' }}>{report.description}</Typography>
                   <Typography component="span" color="primary.main" variant="body2" sx={{ display: 'block', mt: 1.5, fontWeight: 700 }}>Ver detalhe e status</Typography>
                 </Box>

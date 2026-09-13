@@ -23,7 +23,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import {
   consultReport,
-  formatReportCreatedAt,
+  formatReportTimestamp,
   getProtocolConsultErrorMessage,
   protocolConsultSchema,
   reportStatusLabels,
@@ -306,7 +306,7 @@ export function ProtocolConsultPage() {
               <ReportField
                 icon={<CalendarTodayOutlined fontSize="small" />}
                 label="Registrada em"
-                value={formatReportCreatedAt(report.createdAt)}
+                value={formatReportTimestamp(report.createdAt)}
               />
             </Box>
 

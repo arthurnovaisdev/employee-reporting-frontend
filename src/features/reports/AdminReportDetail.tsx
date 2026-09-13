@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Controller, useForm } from 'react-hook-form'
 import { getAdminReportDetail, getAdminReportError, reportStatusUpdateSchema, updateReportStatus, type ReportAdminResponseDTO, type ReportStatusUpdateForm } from './adminReports.api'
-import { formatReportCreatedAt, reportStatusLabels, reportStatuses, type ReportResponseDTO } from './protocolConsult'
+import { formatReportTimestamp, reportStatusLabels, reportStatuses, type ReportResponseDTO } from './protocolConsult'
 import { ListPageSkeleton, QueryErrorState } from '../../components/feedback/AsyncStates'
 import { useAuth } from '../auth/AuthContext'
 import { AdminReportAttachments } from './AdminReportAttachments'
@@ -98,7 +98,7 @@ function LoadedAdminReportDetail({ report, onClose, onUpdated }: {
           </Box>
           <Box component="dl" sx={{ m: 0, '& dt': { color: 'text.secondary', fontSize: '0.875rem' }, '& dd': { m: 0, mb: 2, overflowWrap: 'anywhere' } }}>
             <Typography component="dt">Categoria</Typography><Typography component="dd">{report.category}</Typography>
-            <Typography component="dt">Registrada em</Typography><Typography component="dd">{formatReportCreatedAt(report.createdAt)}</Typography>
+            <Typography component="dt">Registrada em</Typography><Typography component="dd">{formatReportTimestamp(report.createdAt)}</Typography>
             <Typography component="dt">Data do ocorrido</Typography><Typography component="dd">{report.incidentDate ? report.incidentDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$3/$2/$1') : 'Não informada'}</Typography>
             <Typography component="dt">Local do ocorrido</Typography><Typography component="dd">{report.incidentLocation || 'Não informado'}</Typography>
             <Typography component="dt">Descrição</Typography><Typography component="dd" sx={{ whiteSpace: 'pre-wrap' }}>{report.description}</Typography>

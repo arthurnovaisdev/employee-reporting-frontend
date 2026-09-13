@@ -11,7 +11,7 @@ const { submitReport } = await server.ssrLoadModule('/src/features/reports/repor
 const { getCategories, readCategoryPage } = await server.ssrLoadModule('/src/features/reports/categories.api.ts')
 const {
   consultReport,
-  formatReportCreatedAt,
+  formatReportTimestamp,
   getProtocolConsultErrorMessage,
   protocolConsultSchema,
   reportStatusLabels,
@@ -174,7 +174,7 @@ test('consulta usa GET /reports/consult com query params protocol e code e valid
     category: 'Conduta interna',
     description: 'Relato de teste.',
     status: 'IN_ANALYSIS',
-    createdAt: '2026-09-04T12:30:00',
+    createdAt: '2026-09-04T12:30:00Z',
   }
   apiClient.defaults.adapter = async (config) => {
     assert.equal(config.method, 'get')
@@ -185,7 +185,8 @@ test('consulta usa GET /reports/consult com query params protocol e code e valid
 
   assert.deepEqual(await consultReport({ protocol: report.protocol, code: 'ABCD2345EF' }), report)
   assert.equal(reportStatusLabels.IN_ANALYSIS, 'Em análise')
-  assert.equal(formatReportCreatedAt(report.createdAt), '04/09/2026 às 12:30')
+  assert.equal(formatReportTimestamp(report.createdAt), '04/09/2026 às 09:30')
+  assert.equal(formatReportTimestamp('2026-09-13T22:47:00Z'), '13/09/2026 às 19:47')
 })
 
 test('consulta não diferencia protocolo inexistente de código incorreto e trata falhas de serviço', () => {
