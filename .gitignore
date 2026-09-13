@@ -29,3 +29,13 @@ pnpm-debug.log*
 *.iml
 .DS_Store
 Thumbs.db
+
+# Sensitive files
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+credentials*
+secrets*
+service-account*
