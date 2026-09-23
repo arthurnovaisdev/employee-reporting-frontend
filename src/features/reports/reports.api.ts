@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { attachmentsEnabled } from '../../config/features'
 import { apiClient } from '../../lib/http/apiClient'
 import { getApiErrorMessage } from '../../lib/http/apiError'
 import { createAttachmentFormData, validateAttachments } from './attachments'
@@ -16,20 +17,22 @@ export async function submitReport(
   files: File[],
   onCreated: (receipt: ReportReceipt) => void,
 ): Promise<ReportReceipt> {
-  const validationError = await validateAttachments(files)
-  if (validationError) throw new Error(validationError)
+  if (attachmentsEnabled) {
+    const validationError = await validateAttachments(files)
+    if (validationError) throw new Error(validationError)
+  }
 
   const response = await apiClient.post<unknown>('/reports', request)
   const data = protocolResponseSchema.parse(response.data)
   const receipt: ReportReceipt = {
     protocol: data.protocol,
     trackingCode: data.trackingCode,
-    attachmentStatus: files.length ? 'uploading' : 'none',
+    attachmentStatus: attachmentsEnabled && files.length ? 'uploading' : 'none',
   }
   // Preserva o comprovante antes de qualquer operação de upload. Não colocar
   // em caches de mutation, storage, URL, history.state ou logs.
   onCreated(receipt)
-  if (!files.length) return receipt
+  if (!attachmentsEnabled || !files.length) return receipt
 
   try {
     const error = await validateAttachments(files)

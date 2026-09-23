@@ -29,8 +29,9 @@ test('headers restringem scripts, framing, referrer, permissões e conexões ext
   assert.match(index, /<meta name="referrer" content="no-referrer"\s*\/>/)
 })
 
-test('.env.example documenta somente a variável pública esperada', () => {
+test('.env.example documenta somente as variáveis públicas esperadas', () => {
   const variables = [...exampleEnvironment.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)].map((match) => match[1])
-  assert.deepEqual([...new Set(variables)], ['VITE_API_BASE_URL'])
+  assert.deepEqual([...new Set(variables)], ['VITE_API_BASE_URL', 'VITE_ATTACHMENTS_ENABLED'])
   assert.match(exampleEnvironment, /https:\/\/employee-reporting-api-v9fh\.onrender\.com\/api/)
+  assert.match(exampleEnvironment, /^VITE_ATTACHMENTS_ENABLED=false$/m)
 })

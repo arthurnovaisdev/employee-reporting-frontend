@@ -4,6 +4,7 @@ import { Alert, Box, Button, Checkbox, FormControlLabel, Paper, Stack, Typograph
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AppSnackbar, type SnackbarFeedback } from '../../components/feedback/AppSnackbar'
+import { attachmentsEnabled } from '../../config/features'
 import { useAuth } from '../../features/auth/AuthContext'
 import { useReportFlow } from '../../features/reports/ReportFlowLayout'
 
@@ -34,12 +35,12 @@ export function ReportSuccessPage() {
           <Typography component="h1" variant="h5">Denúncia registrada com sucesso</Typography>
           <Typography color="text.secondary" variant="body2" sx={{ mt: 1 }}>Guarde as informações abaixo para acompanhar sua denúncia.</Typography>
         </Box>
-        {receipt.attachmentStatus === 'failed' && <Alert severity="warning">
+        {attachmentsEnabled && receipt.attachmentStatus === 'failed' && <Alert severity="warning">
           Sua denúncia foi registrada. Houve falha somente no envio dos anexos. O protocolo e o código de acompanhamento continuam válidos.
           {' '}{receipt.attachmentError ?? 'Não foi possível confirmar quais arquivos foram recebidos.'} Não registre a denúncia novamente.
         </Alert>}
-        {receipt.attachmentStatus === 'uploaded' && <Alert severity="success">Os anexos foram enviados com sucesso.</Alert>}
-        {receipt.sessionExpired && <Alert severity="info">Sua sessão expirou durante o envio dos anexos. Guarde os dados abaixo antes de entrar novamente.</Alert>}
+        {attachmentsEnabled && receipt.attachmentStatus === 'uploaded' && <Alert severity="success">Os anexos foram enviados com sucesso.</Alert>}
+        {attachmentsEnabled && receipt.sessionExpired && <Alert severity="info">Sua sessão expirou durante o envio dos anexos. Guarde os dados abaixo antes de entrar novamente.</Alert>}
         <Alert severity="warning">O código é exibido somente neste registro e não pode ser recuperado. Guarde ambos em um local seguro. Ao sair ou recarregar esta página, essas informações serão descartadas.</Alert>
         {[
           { label: 'Protocolo', value: receipt.protocol, action: 'Copiar protocolo' },

@@ -69,7 +69,7 @@ export function getApiErrorMessage(error: unknown, options: ApiErrorMessageOptio
     case 409:
       return backendMessage ?? 'Não foi possível concluir porque os dados informados estão em conflito.'
     case 413:
-      return 'O envio excedeu o limite permitido. Envie no máximo 5 anexos, com até 10 MB por arquivo e 25 MiB no total.'
+      return 'O conteúdo enviado excedeu o limite permitido.'
     case 429: {
       const retryAfter = readRetryAfter(error)
       return retryAfter

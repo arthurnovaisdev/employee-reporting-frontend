@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict'
 import { after, test } from 'node:test'
+import { readFileSync } from 'node:fs'
 import axios from 'axios'
 import { createServer } from 'vite'
 
 const server = await createServer({ configFile: false, server: { middlewareMode: true, watch: null } })
 after(() => server.close())
 const { reportSchema, toReportRequest } = await server.ssrLoadModule('/src/features/reports/report.schema.ts')
+const { attachmentsEnabled } = await server.ssrLoadModule('/src/config/features.ts')
 const { validateAttachments, maxAttachmentBytes, maxTotalAttachmentBytes } = await server.ssrLoadModule('/src/features/reports/attachments.ts')
 const { submitReport } = await server.ssrLoadModule('/src/features/reports/reports.api.ts')
 const { getCategories, readCategoryPage } = await server.ssrLoadModule('/src/features/reports/categories.api.ts')
@@ -51,7 +53,7 @@ test('formulário respeita obrigatoriedade, limite e campos opcionais do DTO', (
   })
 })
 
-test('arquivos opcionais validam quantidade, MIME, extensão, vazio e limites de tamanho', async () => {
+test('implementação de validação de arquivos permanece preservada para reativação futura', async () => {
   assert.equal(await validateAttachments([]), null)
   assert.equal(await validateAttachments([pdf, png, new File(['x'], 'foto.jpg', { type: 'image/jpeg' })]), null)
   assert.match(await validateAttachments([new File(['x'], 'falso.pdf', { type: 'text/plain' })]), /tipo não permitido/)
@@ -68,7 +70,7 @@ test('arquivos opcionais validam quantidade, MIME, extensão, vazio e limites de
   assert.equal(maxTotalAttachmentBytes, 25 * 1024 * 1024)
 })
 
-test('sem anexos executa somente POST /reports e preserva comprovante', async () => {
+test('registro executa somente POST JSON /reports mesmo que receba arquivos por código legado', async () => {
   const calls = []
   setAccessToken('token-ficticio-para-teste')
   apiClient.defaults.adapter = async (config) => {
@@ -78,62 +80,27 @@ test('sem anexos executa somente POST /reports e preserva comprovante', async ()
     return response(config, protocol)
   }
   let created
-  const result = await submitReport(toReportRequest(values), [], (receipt) => { created = receipt })
+  const result = await submitReport(toReportRequest(values), [pdf], (receipt) => { created = receipt })
   assert.deepEqual(calls, ['/reports'])
-  assert.equal(result.attachmentStatus, 'none')
-  assert.equal(created.trackingCode, protocol.trackingCode)
+  assert.equal(attachmentsEnabled, false)
+  assert.deepEqual(result, { ...protocol, attachmentStatus: 'none' })
+  assert.deepEqual(created, result)
 })
 
-test('upload aguarda criação e envia trackingCode e partes files repetidas em FormData', async () => {
-  const calls = []
-  let created = false
-  apiClient.defaults.adapter = async (config) => {
-    calls.push(config.url)
-    if (config.url === '/reports') return response(config, protocol)
-    assert.equal(created, true)
-    assert.ok(config.data instanceof FormData)
-    assert.equal(config.data.get('trackingCode'), protocol.trackingCode)
-    assert.deepEqual(config.data.getAll('files').map((file) => file.name), [pdf.name, png.name])
-    assert.equal(config.url.includes(protocol.trackingCode), false)
-    return response(config, '')
-  }
-  const result = await submitReport(toReportRequest(values), [pdf, png], () => { created = true })
-  assert.deepEqual(calls, ['/reports', `/reports/${protocol.protocol}/attachments`])
-  assert.equal(result.attachmentStatus, 'uploaded')
+test('formulário de registro mantém upload atrás da flag desativada por padrão', () => {
+  const page = readFileSync(new URL('../src/pages/reports/NewReportPage.tsx', import.meta.url), 'utf8')
+  const success = readFileSync(new URL('../src/pages/reports/ReportSuccessPage.tsx', import.meta.url), 'utf8')
+
+  assert.match(page, /attachmentsEnabled\s*&&\s*\(\s*<AttachmentPicker/)
+  assert.match(success, /attachmentsEnabled\s*&&\s*receipt\.attachmentStatus/)
 })
 
-test('falha na criação não tenta upload', async () => {
+test('falha na criação não dispara uma segunda chamada', async () => {
   let calls = 0
   apiClient.defaults.adapter = async (config) => { calls += 1; throw httpError(config, 400) }
-  await assert.rejects(submitReport(toReportRequest(values), [pdf], () => assert.fail('não foi criado')))
+  await assert.rejects(submitReport(toReportRequest(values), [], () => assert.fail('não foi criado')))
   assert.equal(calls, 1)
 })
-
-for (const status of [400, 401, 403, 413, 500]) {
-  test(`falha ${status} no upload mantém protocolo/código, sem retry ou redirecionamento global`, async () => {
-    let calls = 0
-    let authEvents = 0
-    const onAuth = () => { authEvents += 1 }
-    window.addEventListener('auth:unauthorized', onAuth)
-    window.addEventListener('auth:forbidden', onAuth)
-    apiClient.defaults.adapter = async (config) => {
-      calls += 1
-      if (config.url === '/reports') return response(config, protocol)
-      throw httpError(config, status)
-    }
-    const result = await submitReport(toReportRequest(values), [pdf], () => {})
-    assert.equal(result.attachmentStatus, 'failed')
-    assert.equal(result.protocol, protocol.protocol)
-    assert.equal(result.trackingCode, protocol.trackingCode)
-    assert.equal(result.sessionExpired, status === 401)
-    if (status === 413) assert.match(result.attachmentError, /5 anexos.*10 MB.*25 MiB/)
-    if (status === 500) assert.equal(result.attachmentError.includes('interno'), false)
-    assert.equal(calls, 2)
-    assert.equal(authEvents, 0)
-    window.removeEventListener('auth:unauthorized', onAuth)
-    window.removeEventListener('auth:forbidden', onAuth)
-  })
-}
 
 test('carrega todas as páginas de categorias com UUIDs reais; não depende de lista fixa', async () => {
   const calls = []

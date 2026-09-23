@@ -143,7 +143,7 @@ test('erros 413 e 429 explicam limites e usam Retry-After quando disponível', (
     'Falha simulada', 'ERR_BAD_RESPONSE', config, undefined,
     { ...response(config, { erro: 'detalhe que não deve substituir a orientação segura' }, status), headers },
   )
-  assert.match(getApiErrorMessage(error(413)), /5 anexos.*10 MB.*25 MiB/)
+  assert.match(getApiErrorMessage(error(413)), /conteúdo enviado excedeu o limite/i)
   assert.match(getApiErrorMessage(error(429)), /Aguarde um pouco/)
   assert.match(getApiErrorMessage(error(429, { 'retry-after': '45' })), /45 segundos/)
   assert.equal(getApiErrorMessage(error(429, { 'retry-after': 'inválido' })).includes('inválido'), false)

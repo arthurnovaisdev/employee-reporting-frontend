@@ -7,6 +7,7 @@ import axios from 'axios'
 import { useEffect, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { Navigate, useNavigate } from 'react-router-dom'
+import { attachmentsEnabled } from '../../config/features'
 import { useAuth } from '../../features/auth/AuthContext'
 import { AttachmentPicker } from '../../features/reports/AttachmentPicker'
 import { getCategories } from '../../features/reports/categories.api'
@@ -129,7 +130,9 @@ export function NewReportPage() {
               error={Boolean(errors.incidentLocation)} helperText={errors.incidentLocation?.message ?? `${watch('incidentLocation').length} / 255 caracteres`}
               slotProps={{ htmlInput: { maxLength: 255 } }} />
           </Stack>
-          <AttachmentPicker files={files} onChange={setFiles} disabled={disabled} validating={validatingFiles} onValidating={setValidatingFiles} />
+          {attachmentsEnabled && (
+            <AttachmentPicker files={files} onChange={setFiles} disabled={disabled} validating={validatingFiles} onValidating={setValidatingFiles} />
+          )}
           <Typography color="text.secondary" variant="body2">Revise as informações antes de enviar. Ao finalizar, guarde o protocolo e o código de acompanhamento para consultar sua denúncia.</Typography>
           {busy && <Alert severity="info" role="status">{stage === 'uploading' ? 'Denúncia registrada. Enviando os anexos…' : 'Registrando sua denúncia…'} Aguarde nesta página.</Alert>}
           <Button type="submit" variant="contained" size="large" disabled={disabled || !categories.isSuccess || !availableCategories.length}
