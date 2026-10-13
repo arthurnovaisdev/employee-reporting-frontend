@@ -28,8 +28,10 @@ import { getApiValidationDetails } from '../../lib/http/apiError'
 import {
   categoryFormSchema,
   createCategory,
+  deactivateCategory,
   getCategoryManagementError,
   getCategoryPage,
+  type Category,
   type CategoryForm,
 } from '../../features/reports/categories.api'
 
@@ -77,7 +79,7 @@ function CreateCategoryDialog({ onClose, onCreated }: {
           sx={{ pt: 0.5 }}
         >
           <Typography id="create-category-description" color="text.secondary" variant="body2">
-            Informe o nome e o estado inicial. A listagem atual mostra somente categorias ativas; uma categoria criada inativa não aparecerá nela.
+            Informe o nome e o estado inicial. Categorias inativas continuam visíveis nesta área, mas não podem ser escolhidas em novas denúncias.
           </Typography>
           {requestError && <Alert severity="error" aria-live="assertive">{requestError}</Alert>}
           <TextField
@@ -123,6 +125,8 @@ export function AdminCategoriesPage() {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
   const [createOpen, setCreateOpen] = useState(false)
+  const [categoryToDeactivate, setCategoryToDeactivate] = useState<Category | null>(null)
+  const [deactivating, setDeactivating] = useState(false)
   const [feedback, setFeedback] = useState<SnackbarFeedback | null>(null)
   const query = useQuery({
     queryKey: ['admin-categories', page],
@@ -143,6 +147,25 @@ export function AdminCategoriesPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-categories'] }),
       queryClient.invalidateQueries({ queryKey: ['categories'] }),
     ])
+  }
+
+  async function onDeactivate() {
+    if (!categoryToDeactivate) return
+    setDeactivating(true)
+    setFeedback(null)
+    try {
+      await deactivateCategory(categoryToDeactivate.id)
+      setCategoryToDeactivate(null)
+      setFeedback({ severity: 'success', message: 'Categoria desativada com sucesso.' })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin-categories'] }),
+        queryClient.invalidateQueries({ queryKey: ['categories'] }),
+      ])
+    } catch (error) {
+      setFeedback({ severity: 'error', message: getCategoryManagementError(error) })
+    } finally {
+      setDeactivating(false)
+    }
   }
 
   return (
@@ -171,10 +194,10 @@ export function AdminCategoriesPage() {
             {data.totalElements !== undefined && (
               <Paper sx={{ p: 2, minWidth: 150 }}>
                 <Typography color="primary.main" variant="h5">{data.totalElements.toLocaleString('pt-BR')}</Typography>
-                <Typography variant="body2" color="text.secondary">Categorias disponíveis</Typography>
+                <Typography variant="body2" color="text.secondary">Categorias cadastradas</Typography>
               </Paper>
             )}
-            <Typography variant="body2" color="text.secondary">20 categorias ativas por página · ordem alfabética</Typography>
+            <Typography variant="body2" color="text.secondary">20 categorias por página · ordem alfabética</Typography>
           </Stack>
 
           {data.categories.length === 0 ? (
@@ -187,10 +210,13 @@ export function AdminCategoriesPage() {
                     <Box sx={{ minWidth: 0 }}>
                       <Typography sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}>{category.name}</Typography>
                       <Typography color="text.secondary" variant="body2" sx={{ mt: 0.5 }}>
-                        Disponível para uso nas denúncias.
+                        {category.active ? 'Disponível para novas denúncias.' : 'Indisponível para novas denúncias.'}
                       </Typography>
                     </Box>
-                    <Chip label="Ativa" size="small" color="success" sx={{ flexShrink: 0 }} />
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                      <Chip label={category.active ? 'Ativa' : 'Inativa'} size="small" color={category.active ? 'success' : 'default'} />
+                      {category.active && <Button size="small" color="error" variant="outlined" disabled={query.isFetching || deactivating} onClick={() => setCategoryToDeactivate(category)}>Desativar</Button>}
+                    </Stack>
                   </Stack>
                 </Paper>
               ))}
@@ -210,6 +236,18 @@ export function AdminCategoriesPage() {
       )}
 
       {createOpen && <CreateCategoryDialog onClose={() => setCreateOpen(false)} onCreated={onCreated} />}
+      <Dialog open={Boolean(categoryToDeactivate)} onClose={() => { if (!deactivating) setCategoryToDeactivate(null) }} aria-labelledby="deactivate-category-title">
+        <DialogTitle id="deactivate-category-title">Desativar categoria?</DialogTitle>
+        <DialogContent dividers>
+          <Typography>“{categoryToDeactivate?.name}” deixará de aparecer no cadastro de novas denúncias. Denúncias já registradas permanecem com a categoria.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCategoryToDeactivate(null)} disabled={deactivating}>Cancelar</Button>
+          <Button color="error" variant="contained" onClick={() => void onDeactivate()} disabled={deactivating} startIcon={deactivating ? <CircularProgress size={18} color="inherit" /> : undefined}>
+            {deactivating ? 'Desativando…' : 'Desativar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <AppSnackbar feedback={feedback} onClose={() => setFeedback(null)} />
     </Box>
   )

@@ -20,12 +20,17 @@ export function readCategoryPage(data: unknown) {
 export type CategoryPage = ReturnType<typeof readCategoryPage>
 
 export async function getCategoryPage(page: number, signal?: AbortSignal) {
-  const response = await apiClient.get<unknown>('/categories', {
+  const response = await apiClient.get<unknown>('/categories/admin', {
     params: { page, size: 20 }, signal,
   })
   const result = readCategoryPage(response.data)
   if (result.number !== page) throw new Error('Página de categorias inesperada.')
   return result
+}
+
+export async function deactivateCategory(id: string) {
+  const categoryId = z.string().uuid().parse(id)
+  await apiClient.patch<void>(`/categories/${categoryId}/deactivate`)
 }
 
 export async function getCategories(signal?: AbortSignal): Promise<Category[]> {

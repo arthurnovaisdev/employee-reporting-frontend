@@ -20,6 +20,7 @@ const {
 } = await server.ssrLoadModule('/src/features/users/users.api.ts')
 const {
   createCategory,
+  deactivateCategory,
   getCategoryPage,
   readCategoryPage,
 } = await server.ssrLoadModule('/src/features/reports/categories.api.ts')
@@ -42,6 +43,7 @@ const category = {
   name: 'Conduta interna',
   active: true,
 }
+const inactiveCategory = { ...category, id: '550e8400-e29b-41d4-a716-446655440003', name: 'Categoria antiga', active: false }
 const response = (config, data, status = 200) => ({ config, data, status, statusText: '', headers: {} })
 const authenticate = (token = 'fixture-admin', role = 'ADMIN', passwordChanged = true) => {
   setAuthSession({ token, name: 'Teste', role, passwordChanged })
@@ -124,26 +126,33 @@ test('detalhe, ativação e desativação usam somente os endpoints atuais', asy
   ])
 })
 
-test('categorias administrativas usam somente GET paginado e POST com CategoryRequestDTO', async () => {
+test('categorias administrativas listam todas e podem desativar uma categoria', async () => {
   let call = 0
   apiClient.defaults.adapter = async (config) => {
     call++
     if (call === 1) {
       assert.equal(config.method, 'get')
-      assert.equal(config.url, '/categories')
+      assert.equal(config.url, '/categories/admin')
       assert.deepEqual(config.params, { page: 1, size: 20 })
-      return response(config, springPage([category], 1, 2, 21))
+      return response(config, springPage([category, inactiveCategory], 1, 2, 21))
     }
-    assert.equal(config.method, 'post')
-    assert.equal(config.url, '/categories')
-    assert.deepEqual(JSON.parse(config.data), { name: 'Conduta interna', active: true })
-    return response(config, category, 201)
+    if (call === 2) {
+      assert.equal(config.method, 'post')
+      assert.equal(config.url, '/categories')
+      assert.deepEqual(JSON.parse(config.data), { name: 'Conduta interna', active: true })
+      return response(config, category, 201)
+    }
+    assert.equal(config.method, 'patch')
+    assert.equal(config.url, `/categories/${category.id}/deactivate`)
+    return response(config, undefined, 204)
   }
 
   const page = await getCategoryPage(1)
-  assert.deepEqual(page.categories, [category])
+  assert.deepEqual(page.categories, [category, inactiveCategory])
   assert.equal(page.hasNext, false)
   assert.deepEqual(await createCategory({ name: 'Conduta interna', active: true, extra: 'ignorar' }), category)
+  await deactivateCategory(category.id)
+  assert.equal(call, 3)
   assert.throws(() => readCategoryPage({ ...springPage([category]), number: 2, first: false }))
 })
 
